@@ -1,0 +1,5 @@
+---
+other:
+  - |
+    Unify timezones used -- use UTC for both email submissions and internal
+    events.

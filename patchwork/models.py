@@ -308,7 +308,7 @@ class EmailMixin(models.Model):
     # email metadata
 
     msgid = models.CharField(max_length=255)
-    date = models.DateTimeField(default=datetime.datetime.now)
+    date = models.DateTimeField(default=datetime.datetime.utcnow)
     headers = models.TextField(blank=True)
 
     # content
@@ -828,7 +828,7 @@ class Check(models.Model):
 
     patch = models.ForeignKey(Patch, on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    date = models.DateTimeField(default=datetime.datetime.now)
+    date = models.DateTimeField(default=datetime.datetime.utcnow)
 
     state = models.SmallIntegerField(
         choices=STATE_CHOICES, default=STATE_PENDING,
@@ -900,7 +900,7 @@ class Event(models.Model):
         db_index=True,
         help_text='The category of the event.')
     date = models.DateTimeField(
-        default=datetime.datetime.now,
+        default=datetime.datetime.utcnow,
         help_text='The time this event was created.')
 
     # event object
@@ -965,7 +965,7 @@ class EmailConfirmation(models.Model):
     email = models.CharField(max_length=200)
     user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
     key = HashField()
-    date = models.DateTimeField(default=datetime.datetime.now)
+    date = models.DateTimeField(default=datetime.datetime.utcnow)
     active = models.BooleanField(default=True)
 
     def deactivate(self):
@@ -973,7 +973,7 @@ class EmailConfirmation(models.Model):
         self.save()
 
     def is_valid(self):
-        return self.date + self.validity > datetime.datetime.now()
+        return self.date + self.validity > datetime.datetime.utcnow()
 
     def save(self, *args, **kwargs):
         limit = 1 << 32
@@ -999,5 +999,5 @@ class EmailOptout(models.Model):
 class PatchChangeNotification(models.Model):
     patch = models.OneToOneField(Patch, primary_key=True,
                                  on_delete=models.CASCADE)
-    last_modified = models.DateTimeField(default=datetime.datetime.now)
+    last_modified = models.DateTimeField(default=datetime.datetime.utcnow)
     orig_state = models.ForeignKey(State, on_delete=models.CASCADE)
