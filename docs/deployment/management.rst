@@ -63,7 +63,7 @@ due to, for example, an outage.
 .. option:: --list-id <list-id>
 
    mailing list ID. If not supplied, this will be extracted from the mail
-   headers.
+   headers. Don't use this option if you require filtering based on subjects.
 
 .. option:: infile
 
@@ -88,7 +88,7 @@ the :ref:`deployment installation guide <deployment-parsemail>`.
 .. option:: --list-id <list-id>
 
    mailing list ID. If not supplied, this will be extracted from the mail
-   headers.
+   headers. Don't use this option if you require filtering based on subjects.
 
 .. option:: infile
 

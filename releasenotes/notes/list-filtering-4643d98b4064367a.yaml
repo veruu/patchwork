@@ -1,0 +1,10 @@
+---
+features:
+  - |
+    Allow list filtering into multiple projects (and email dropping) based on
+    subject prefixes. Disabled by default, enable by specifying a regular
+    expression which needs to be matched in the subject on a per-project basis
+    (field `subject_match`).
+api:
+  - |
+    Expose `subject_match` in REST API.

@@ -71,8 +71,14 @@ class Project(models.Model):
 
     linkname = models.CharField(max_length=255, unique=True)
     name = models.CharField(max_length=255, unique=True)
-    listid = models.CharField(max_length=255, unique=True)
+    listid = models.CharField(max_length=255)
     listemail = models.CharField(max_length=200)
+    subject_match = models.CharField(
+        max_length=64, blank=True, default='', help_text='Regex to match the '
+        'subject against if only part of emails sent to the list belongs to '
+        'this project. Will be used with IGNORECASE and MULTILINE flags. If '
+        'rules for more projects match the first one returned from DB is '
+        'chosen.')
 
     # url metadata
 
@@ -100,6 +106,7 @@ class Project(models.Model):
         return self.name
 
     class Meta:
+        unique_together = (('listid', 'subject_match'),)
         ordering = ['linkname']
 
 

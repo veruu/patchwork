@@ -157,7 +157,23 @@ def find_project_by_id(list_id):
         project = Project.objects.get(listid=list_id)
     except Project.DoesNotExist:
         logger.debug("'%s' if not a valid project list-id", list_id)
+    except Project.MultipleObjectsReturned:
+        logger.debug("Multiple projects with list-id '%s' found", list_id)
     return project
+
+
+def find_project_by_id_and_subject(list_id, subject):
+    """Find a `project` object based on `list_id` and subject prefix match."""
+    projects = Project.objects.filter(listid=list_id)
+    for project in projects:
+        if (not project.subject_match or
+                re.search(project.subject_match, subject,
+                          re.MULTILINE | re.IGNORECASE)):
+            return project
+
+    logger.debug("No project to match email with list-id '%s', subject '%s' "
+                 "found", list_id, subject)
+    return None
 
 
 def find_project_by_header(mail):
@@ -181,7 +197,8 @@ def find_project_by_header(mail):
 
             listid = match.group(1)
 
-            project = find_project_by_id(listid)
+            project = find_project_by_id_and_subject(listid,
+                                                     mail.get('Subject'))
             if project:
                 break
 
