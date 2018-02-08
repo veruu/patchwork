@@ -21,7 +21,7 @@ from django.test import TestCase
 from django.test import TransactionTestCase
 
 from patchwork.models import Patch
-from patchwork.models import PatchTag
+from patchwork.models import SubmissionTag
 from patchwork.models import Tag
 from patchwork.tests.utils import create_comment
 from patchwork.tests.utils import create_patch
@@ -97,8 +97,8 @@ class PatchTagsTest(TransactionTestCase):
 
         def count(name):
             try:
-                return patch.patchtag_set.get(tag__name=name).count
-            except PatchTag.DoesNotExist:
+                return patch.submissiontag_set.get(tag__name=name).count
+            except SubmissionTag.DoesNotExist:
                 return 0
 
         counts = (
