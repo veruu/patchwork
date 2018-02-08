@@ -35,6 +35,7 @@ from patchwork.api.embedded import SeriesSerializer
 from patchwork.api.embedded import UserSerializer
 from patchwork.models import Patch
 from patchwork.models import State
+from patchwork.models import SubmissionTag
 from patchwork.parser import clean_subject
 
 
@@ -92,9 +93,10 @@ class PatchListSerializer(HyperlinkedModelSerializer):
         return request.build_absolute_uri(instance.get_mbox_url())
 
     def get_tags(self, instance):
-        # TODO(stephenfin): Make tags performant, possibly by reworking the
-        # model
-        return {}
+        return {submissiontag.tag.name: [value.value for value in
+                                         submissiontag.values.all()]
+                for submissiontag in
+                SubmissionTag.objects.filter(submission_id=instance.id)}
 
     def get_check(self, instance):
         return instance.combined_check_state

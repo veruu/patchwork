@@ -29,6 +29,7 @@ from patchwork.api.embedded import PersonSerializer
 from patchwork.api.embedded import ProjectSerializer
 from patchwork.api.embedded import SeriesSerializer
 from patchwork.models import CoverLetter
+from patchwork.models import SubmissionTag
 
 
 class CoverLetterListSerializer(HyperlinkedModelSerializer):
@@ -37,15 +38,22 @@ class CoverLetterListSerializer(HyperlinkedModelSerializer):
     submitter = PersonSerializer(read_only=True)
     mbox = SerializerMethodField()
     series = SeriesSerializer(many=True, read_only=True)
+    tags = SerializerMethodField()
 
     def get_mbox(self, instance):
         request = self.context.get('request')
         return request.build_absolute_uri(instance.get_mbox_url())
 
+    def get_tags(self, instance):
+        return {submissiontag.tag.name: [value.value for value in
+                                         submissiontag.values.all()]
+                for submissiontag in
+                SubmissionTag.objects.filter(submission_id=instance.id)}
+
     class Meta:
         model = CoverLetter
         fields = ('id', 'url', 'project', 'msgid', 'date', 'name', 'submitter',
-                  'mbox', 'series')
+                  'mbox', 'series', 'tags')
         read_only_fields = fields
         extra_kwargs = {
             'url': {'view_name': 'api-cover-detail'},

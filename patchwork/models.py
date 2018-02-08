@@ -20,7 +20,6 @@
 
 from __future__ import absolute_import
 
-from collections import Counter
 from collections import OrderedDict
 import datetime
 import random
@@ -253,13 +252,21 @@ class Tag(models.Model):
         ordering = ['abbrev']
 
 
-class PatchTag(models.Model):
-    patch = models.ForeignKey('Patch', on_delete=models.CASCADE)
+class TagValue(models.Model):
+    value = models.CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.value
+
+
+class SubmissionTag(models.Model):
+    submission = models.ForeignKey('Submission', on_delete=models.CASCADE)
     tag = models.ForeignKey('Tag', on_delete=models.CASCADE)
     count = models.IntegerField(default=1)
+    values = models.ManyToManyField(TagValue)
 
     class Meta:
-        unique_together = [('patch', 'tag')]
+        unique_together = [('submission', 'tag')]
 
 
 def get_default_initial_patch_state():
@@ -289,10 +296,10 @@ class PatchQuerySet(models.query.QuerySet):
         for tag in tags:
             select[tag.attr_name] = (
                 "coalesce("
-                "(SELECT count FROM patchwork_patchtag"
-                " WHERE patchwork_patchtag.patch_id="
+                "(SELECT count FROM patchwork_submissiontag"
+                " WHERE patchwork_submissiontag.submission_id="
                 "patchwork_patch.submission_ptr_id"
-                " AND patchwork_patchtag.tag_id=%s), 0)")
+                " AND patchwork_submissiontag.tag_id=%s), 0)")
             select_params.append(tag.id)
 
         return qs.extra(select=select, select_params=select_params)
@@ -367,8 +374,113 @@ class Submission(FilenameMixin, EmailMixin, models.Model):
     # submission metadata
 
     name = models.CharField(max_length=255)
+    submission_tags = models.ManyToManyField(Tag, through=SubmissionTag)
 
     # patchwork metadata
+
+    @staticmethod
+    def extract_tags(content, tags):
+        found_tags = {}
+        for tag in tags:
+            regex = re.compile(tag.pattern + '\s(.*)',
+                               re.MULTILINE | re.IGNORECASE)
+            found_tags[tag.name] = regex.findall(content)
+
+        return found_tags
+
+    def _set_tag_values(self, tag, value_list):
+        if not value_list:
+            self.submissiontag_set.filter(tag=tag).delete()
+            return
+
+        submissiontag, _ = SubmissionTag.objects.get_or_create(submission=self,
+                                                               tag=tag)
+        old_values = set([tag_value.value for tag_value
+                          in submissiontag.values.all()])
+
+        # We really don't want to count more acks by the same person multiple
+        # times, so let's use sets to get unique values.
+        for to_remove in submissiontag.values.filter(
+                value__in=old_values - set(value_list)):
+            submissiontag.values.remove(to_remove)
+
+        for new_value in set(value_list) - old_values:
+            # Maybe the value already exists but isn't associated with this
+            # submission (eg person who acked another patch). Reuse it.
+            new, _ = TagValue.objects.get_or_create(value=new_value)
+            submissiontag.values.add(new)
+        submissiontag.count = len(set(value_list))
+        submissiontag.save()
+
+    def refresh_tags(self):
+        tags = self.project.tags
+        if not tags:
+            return
+
+        if self.content:
+            submission_tags = self.extract_tags(self.content, tags)
+        else:
+            submission_tags = {tag.name: [] for tag in tags}
+
+        # Merge all comments into a single content to avoid refreshing the
+        # dictionary values all the time. We need to iterate through the
+        # comments anyways.
+        submission_comment_tags = self.extract_tags(
+            '\n'.join([comment.content for comment in self.comments.all()]),
+            tags
+        )
+        for tag in tags:
+            submission_tags[tag.name].extend(submission_comment_tags[tag.name])
+
+        # We need to find the series submission belongs to first
+        related_series = None
+        refs = [hdr.split(': ')[1] for hdr in self.headers.split('\n') if
+                hdr.split(': ')[0] == 'In-Reply-To' or
+                hdr.split(': ')[0] == 'References'] + [self.msgid]
+        for ref in refs:
+            try:
+                related_series = SeriesReference.objects.get(
+                    msgid=ref,
+                    series__project=self.project
+                ).series
+            except SeriesReference.DoesNotExist:
+                continue
+
+        if related_series:
+            if hasattr(self, 'coverletter'):
+                # We tagged cover letter and need to update all patches in
+                # the series
+                for patch in related_series.patches.all():
+                    merged_content = '\n'.join([comment.content for comment in
+                                                patch.comments.all()])
+                    if patch.content:
+                        merged_content += '\n' + patch.content
+
+                    added_tags = self.extract_tags(merged_content, tags)
+                    for tag in tags:
+                        patch._set_tag_values(
+                            tag,
+                            submission_tags[tag.name] + added_tags[tag.name]
+                        )
+            else:
+                # We tagged a patch but need to take into account all tags on
+                # the cover letter too
+                cover = related_series.cover_letter
+                if cover:
+                    cover_tags = self.extract_tags(
+                        '\n'.join([comment.content for comment in
+                                   cover.comments.all()] + [cover.content]),
+                        tags
+                    )
+                    for tag in tags:
+                        submission_tags[tag.name].extend(cover_tags[tag.name])
+
+        for tag in tags:
+            self._set_tag_values(tag, submission_tags[tag.name])
+
+    def save(self, *args, **kwargs):
+        super(Submission, self).save(**kwargs)
+        self.refresh_tags()
 
     def is_editable(self, user):
         return False
@@ -413,7 +525,6 @@ class Patch(SeriesMixin, Submission):
     diff = models.TextField(null=True, blank=True)
     commit_ref = models.CharField(max_length=255, null=True, blank=True)
     pull_url = models.CharField(max_length=255, null=True, blank=True)
-    tags = models.ManyToManyField(Tag, through=PatchTag)
 
     # patchwork metadata
 
@@ -425,38 +536,6 @@ class Patch(SeriesMixin, Submission):
 
     objects = PatchManager()
 
-    @staticmethod
-    def extract_tags(content, tags):
-        counts = Counter()
-
-        for tag in tags:
-            regex = re.compile(tag.pattern, re.MULTILINE | re.IGNORECASE)
-            counts[tag] = len(regex.findall(content))
-
-        return counts
-
-    def _set_tag(self, tag, count):
-        if count == 0:
-            self.patchtag_set.filter(tag=tag).delete()
-            return
-        patchtag, _ = PatchTag.objects.get_or_create(patch=self, tag=tag)
-        if patchtag.count != count:
-            patchtag.count = count
-            patchtag.save()
-
-    def refresh_tag_counts(self):
-        tags = self.project.tags
-        counter = Counter()
-
-        if self.content:
-            counter += self.extract_tags(self.content, tags)
-
-        for comment in self.comments.all():
-            counter = counter + self.extract_tags(comment.content, tags)
-
-        for tag in tags:
-            self._set_tag(tag, counter[tag])
-
     def save(self, *args, **kwargs):
         if not hasattr(self, 'state') or not self.state:
             self.state = get_default_initial_patch_state()
@@ -465,8 +544,6 @@ class Patch(SeriesMixin, Submission):
             self.hash = hash_diff(self.diff)
 
         super(Patch, self).save(**kwargs)
-
-        self.refresh_tag_counts()
 
     def is_editable(self, user):
         if not is_authenticated(user):
@@ -591,13 +668,11 @@ class Comment(EmailMixin, models.Model):
 
     def save(self, *args, **kwargs):
         super(Comment, self).save(*args, **kwargs)
-        if hasattr(self.submission, 'patch'):
-            self.submission.patch.refresh_tag_counts()
+        self.submission.refresh_tags()
 
     def delete(self, *args, **kwargs):
         super(Comment, self).delete(*args, **kwargs)
-        if hasattr(self.submission, 'patch'):
-            self.submission.patch.refresh_tag_counts()
+        self.submission.refresh_tags()
 
     class Meta:
         ordering = ['date']
