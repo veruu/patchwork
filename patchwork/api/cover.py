@@ -17,6 +17,8 @@
 # along with Patchwork; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+from django.db.models import Q
+
 import email.parser
 
 from rest_framework.generics import ListAPIView
@@ -28,7 +30,9 @@ from patchwork.api.filters import CoverLetterFilter
 from patchwork.api.embedded import PersonSerializer
 from patchwork.api.embedded import ProjectSerializer
 from patchwork.api.embedded import SeriesSerializer
+from patchwork.models import Comment
 from patchwork.models import CoverLetter
+from patchwork.models import RelatedTag
 
 
 class CoverLetterListSerializer(HyperlinkedModelSerializer):
@@ -37,15 +41,41 @@ class CoverLetterListSerializer(HyperlinkedModelSerializer):
     submitter = PersonSerializer(read_only=True)
     mbox = SerializerMethodField()
     series = SeriesSerializer(many=True, read_only=True)
+    tags = SerializerMethodField()
 
     def get_mbox(self, instance):
         request = self.context.get('request')
         return request.build_absolute_uri(instance.get_mbox_url())
 
+    def get_tags(self, instance):
+        tags = instance.project.tags
+        if not tags:
+            return {}
+
+        all_tags = {tag.name: [] for tag in tags}
+
+        related_tags = RelatedTag.objects.filter(
+            Q(submission__id=instance.id)
+            | Q(comment__id__in=[comment.id for comment in
+                                 instance.comments.all()])
+        )
+
+        for related_tag in related_tags:
+            all_tags[related_tag.tag.name].extend([value.value for value in
+                                                   related_tag.values.all()])
+
+        # Sanitize the values -- remove possible duplicates and unused tags
+        for tag in tags:
+            if all_tags[tag.name]:
+                all_tags[tag.name] = set(all_tags[tag.name])
+            else:
+                del(all_tags[tag.name])
+        return all_tags
+
     class Meta:
         model = CoverLetter
         fields = ('id', 'url', 'project', 'msgid', 'date', 'name', 'submitter',
-                  'mbox', 'series')
+                  'mbox', 'series', 'tags')
         read_only_fields = fields
         extra_kwargs = {
             'url': {'view_name': 'api-cover-detail'},

@@ -32,6 +32,7 @@ from django.utils import six
 
 from patchwork.models import Comment
 from patchwork.models import Patch
+from patchwork.models import RelatedTag
 from patchwork.models import Series
 
 if settings.ENABLE_REST_API:
@@ -75,9 +76,10 @@ def _submission_to_mbox(submission):
     else:
         postscript = ''
 
-    # TODO(stephenfin): Make this use the tags infrastructure
-    for comment in Comment.objects.filter(submission=submission):
-        body += comment.patch_responses
+    for comment in submission.comments.all():
+        for related_tag in comment.related_tags.all():
+            for value in related_tag.values.all():
+                body += '%s: %s\n' % (related_tag.name, value.value)
 
     if postscript:
         body += '---\n' + postscript + '\n'

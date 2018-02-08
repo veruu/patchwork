@@ -20,8 +20,6 @@
 
 from __future__ import absolute_import
 
-from collections import Counter
-from collections import OrderedDict
 import datetime
 import random
 import re
@@ -30,6 +28,10 @@ import django
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericRelation
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Q
 from django.db import models
 from django.utils.encoding import python_2_unicode_compatible
 from django.utils.functional import cached_property
@@ -252,10 +254,6 @@ class Tag(models.Model):
                                       ' tag\'s count in the patch list view',
                                       default=True)
 
-    @property
-    def attr_name(self):
-        return 'tag_%d_count' % self.id
-
     def __str__(self):
         return self.name
 
@@ -263,62 +261,28 @@ class Tag(models.Model):
         ordering = ['abbrev']
 
 
-class PatchTag(models.Model):
-    patch = models.ForeignKey('Patch', on_delete=models.CASCADE)
+class TagValue(models.Model):
+    value = models.CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.value
+
+
+class RelatedTag(models.Model):
+    # Allow association with both submissions and comments
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    related_to = GenericForeignKey('content_type', 'object_id')
+
     tag = models.ForeignKey('Tag', on_delete=models.CASCADE)
-    count = models.IntegerField(default=1)
+    values = models.ManyToManyField(TagValue)
 
     class Meta:
-        unique_together = [('patch', 'tag')]
+        unique_together = [('content_type', 'object_id', 'tag')]
 
 
 def get_default_initial_patch_state():
     return State.objects.get(ordering=0)
-
-
-class PatchQuerySet(models.query.QuerySet):
-
-    def with_tag_counts(self, project=None):
-        if project and not project.use_tags:
-            return self
-
-        # We need the project's use_tags field loaded for Project.tags().
-        # Using prefetch_related means we'll share the one instance of
-        # Project, and share the project.tags cache between all patch.project
-        # references.
-        qs = self.prefetch_related('project')
-        select = OrderedDict()
-        select_params = []
-
-        # All projects have the same tags, so we're good to go here
-        if project:
-            tags = project.tags
-        else:
-            tags = Tag.objects.all()
-
-        for tag in tags:
-            select[tag.attr_name] = (
-                "coalesce("
-                "(SELECT count FROM patchwork_patchtag"
-                " WHERE patchwork_patchtag.patch_id="
-                "patchwork_patch.submission_ptr_id"
-                " AND patchwork_patchtag.tag_id=%s), 0)")
-            select_params.append(tag.id)
-
-        return qs.extra(select=select, select_params=select_params)
-
-
-class PatchManager(models.Manager):
-    use_for_related_fields = True
-    # NOTE(stephenfin): This is necessary to silence a warning with Django >=
-    # 1.10. Remove when 1.10 is the minimum supported version.
-    silence_use_for_related_fields_deprecation = True
-
-    def get_queryset(self):
-        return PatchQuerySet(self.model, using=self.db)
-
-    def with_tag_counts(self, project):
-        return self.get_queryset().with_tag_counts(project)
 
 
 class EmailMixin(models.Model):
@@ -334,17 +298,54 @@ class EmailMixin(models.Model):
     submitter = models.ForeignKey(Person, on_delete=models.CASCADE)
     content = models.TextField(null=True, blank=True)
 
-    response_re = re.compile(
-        r'^(Tested|Reviewed|Acked|Signed-off|Nacked|Reported)-by:.*$',
-        re.M | re.I)
+    @staticmethod
+    def extract_tags(content, tags):
+        found_tags = {}
+        for tag in tags:
+            regex = re.compile(tag.pattern + '\s(.*)',
+                               re.MULTILINE | re.IGNORECASE)
+            found_tags[tag.name] = regex.findall(content)
 
-    @property
-    def patch_responses(self):
-        if not self.content:
-            return ''
+        return found_tags
 
-        return ''.join([match.group(0) + '\n' for match in
-                        self.response_re.finditer(self.content)])
+    def _set_tag_values(self, tag, value_list):
+        if not value_list:
+            self.related_tags.filter(tag=tag).delete()
+            return
+
+        obj_type = ContentType.objects.get_for_model(self)
+        relatedtag, _ = RelatedTag.objects.get_or_create(content_type=obj_type,
+                                                         object_id=self.id,
+                                                         tag=tag)
+        old_values = set([tag_value.value for tag_value
+                          in relatedtag.values.all()])
+
+        # Counting more acks by the same person multiple times doesn't make
+        # sense so let's use sets to get unique values.
+        for to_remove in relatedtag.values.filter(
+                value__in=old_values - set(value_list)):
+            relatedtag.values.remove(to_remove)
+
+        for new_value in set(value_list) - old_values:
+            # Maybe the value already exists but isn't associated with this
+            # content (eg person who acked another patch). Reuse it.
+            new, _ = TagValue.objects.get_or_create(value=new_value)
+            relatedtag.values.add(new)
+        relatedtag.save()
+
+    def refresh_tags(self):
+        if hasattr(self, 'project'):
+            tags = self.project.tags
+        else:
+            # Tagged comment
+            tags = self.submission.project.tags
+        if not tags:
+            return
+
+        if self.content:
+            related_tags = self.extract_tags(self.content, tags)
+            for tag in tags:
+                self._set_tag_values(tag, related_tags[tag.name])
 
     def save(self, *args, **kwargs):
         # Modifying a submission via admin interface changes '\n' newlines in
@@ -377,6 +378,7 @@ class Submission(FilenameMixin, EmailMixin, models.Model):
     # submission metadata
 
     name = models.CharField(max_length=255)
+    related_tags = GenericRelation(RelatedTag, related_query_name='submission')
 
     # patchwork metadata
 
@@ -385,6 +387,10 @@ class Submission(FilenameMixin, EmailMixin, models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        super(Submission, self).save(*args, **kwargs)
+        self.refresh_tags()
 
     class Meta:
         ordering = ['date']
@@ -423,7 +429,6 @@ class Patch(SeriesMixin, Submission):
     diff = models.TextField(null=True, blank=True)
     commit_ref = models.CharField(max_length=255, null=True, blank=True)
     pull_url = models.CharField(max_length=255, null=True, blank=True)
-    tags = models.ManyToManyField(Tag, through=PatchTag)
 
     # patchwork metadata
 
@@ -437,40 +442,6 @@ class Patch(SeriesMixin, Submission):
     # patches in a project without needing to do a JOIN.
     patch_project = models.ForeignKey(Project, on_delete=models.CASCADE)
 
-    objects = PatchManager()
-
-    @staticmethod
-    def extract_tags(content, tags):
-        counts = Counter()
-
-        for tag in tags:
-            regex = re.compile(tag.pattern, re.MULTILINE | re.IGNORECASE)
-            counts[tag] = len(regex.findall(content))
-
-        return counts
-
-    def _set_tag(self, tag, count):
-        if count == 0:
-            self.patchtag_set.filter(tag=tag).delete()
-            return
-        patchtag, _ = PatchTag.objects.get_or_create(patch=self, tag=tag)
-        if patchtag.count != count:
-            patchtag.count = count
-            patchtag.save()
-
-    def refresh_tag_counts(self):
-        tags = self.project.tags
-        counter = Counter()
-
-        if self.content:
-            counter += self.extract_tags(self.content, tags)
-
-        for comment in self.comments.all():
-            counter = counter + self.extract_tags(comment.content, tags)
-
-        for tag in tags:
-            self._set_tag(tag, counter[tag])
-
     def save(self, *args, **kwargs):
         if not hasattr(self, 'state') or not self.state:
             self.state = get_default_initial_patch_state()
@@ -480,8 +451,6 @@ class Patch(SeriesMixin, Submission):
 
         super(Patch, self).save(**kwargs)
 
-        self.refresh_tag_counts()
-
     def is_editable(self, user):
         if not is_authenticated(user):
             return False
@@ -490,6 +459,36 @@ class Patch(SeriesMixin, Submission):
             return True
 
         return self.project.is_editable(user)
+
+    @property
+    def dict_of_all_related_tags(self):
+        all_related_tags = {tag: [] for tag in self.project.tags}
+
+        patch_tags = RelatedTag.objects.filter(
+            Q(submission__id=self.id)
+            | Q(comment__id__in=[comment.id for comment in
+                                 self.comments.all()])
+        )
+        cover = SeriesPatch.objects.get(
+             patch_id=self.id).series.cover_letter
+        if cover:
+            cover_tags = RelatedTag.objects.filter(
+                Q(submission__id=cover.submission_ptr_id)
+                | Q(comment__id__in=[comment.id for comment in
+                                     cover.comments.all()])
+            )
+        else:
+            cover_tags = RelatedTag.objects.none()
+
+        for related_tag in (patch_tags | cover_tags):
+            all_related_tags[related_tag.tag].extend([value.value for value in
+                                                      related_tag.values.all()]
+                                                     )
+        # Remove possible duplicates
+        for key in all_related_tags:
+            all_related_tags[key] = set(all_related_tags[key])
+
+        return all_related_tags
 
     @property
     def combined_check_state(self):
@@ -602,16 +601,11 @@ class Comment(EmailMixin, models.Model):
     submission = models.ForeignKey(Submission, related_name='comments',
                                    related_query_name='comment',
                                    on_delete=models.CASCADE)
+    related_tags = GenericRelation(RelatedTag, related_query_name='comment')
 
     def save(self, *args, **kwargs):
         super(Comment, self).save(*args, **kwargs)
-        if hasattr(self.submission, 'patch'):
-            self.submission.patch.refresh_tag_counts()
-
-    def delete(self, *args, **kwargs):
-        super(Comment, self).delete(*args, **kwargs)
-        if hasattr(self.submission, 'patch'):
-            self.submission.patch.refresh_tag_counts()
+        self.refresh_tags()
 
     class Meta:
         ordering = ['date']

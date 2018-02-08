@@ -17,6 +17,8 @@
 # along with Patchwork; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+from django.db.models import Q
+
 import email.parser
 
 from django.utils.translation import ugettext_lazy as _
@@ -34,6 +36,8 @@ from patchwork.api.embedded import ProjectSerializer
 from patchwork.api.embedded import SeriesSerializer
 from patchwork.api.embedded import UserSerializer
 from patchwork.models import Patch
+from patchwork.models import RelatedTag
+from patchwork.models import SeriesPatch
 from patchwork.models import State
 from patchwork.parser import clean_subject
 
@@ -92,9 +96,40 @@ class PatchListSerializer(HyperlinkedModelSerializer):
         return request.build_absolute_uri(instance.get_mbox_url())
 
     def get_tags(self, instance):
-        # TODO(stephenfin): Make tags performant, possibly by reworking the
-        # model
-        return {}
+        tags = instance.patch_project.tags
+        if not tags:
+            return {}
+
+        all_tags = {tag.name: [] for tag in tags}
+
+        patch_tags = RelatedTag.objects.filter(
+            Q(submission__id=instance.id)
+            | Q(comment__id__in=[comment.id for comment in
+                                 instance.comments.all()])
+        )
+        cover = SeriesPatch.objects.get(
+            patch_id=instance.id).series.cover_letter
+        if cover:
+            cover_tags = RelatedTag.objects.filter(
+                Q(submission__id=cover.submission_ptr_id)
+                | Q(comment__id__in=[comment.id for comment in
+                                     cover.comments.all()])
+            )
+        else:
+            cover_tags = RelatedTag.objects.none()
+
+        for related_tag in (patch_tags | cover_tags):
+            all_tags[related_tag.tag.name].extend([value.value for value in
+                                                   related_tag.values.all()])
+
+        # Sanitize the values -- remove possible duplicates and unused tags
+        for tag in tags:
+            if all_tags[tag.name]:
+                all_tags[tag.name] = set(all_tags[tag.name])
+            else:
+                del(all_tags[tag.name])
+
+        return all_tags
 
     def get_check(self, instance):
         return instance.combined_check_state

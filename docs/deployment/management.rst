@@ -119,17 +119,17 @@ retag
 
 .. program:: manage.py retag
 
-Update the tag (Ack/Review/Test) counts on existing patches.
+Update the tag (Ack/Review/Test) counts on existing submissions.
 
 .. code-block:: shell
 
-  ./manage.py retag [<patch_id>...]
+  ./manage.py retag [<submission_id>...]
 
-Patchwork extracts :ref:`tags <overview-tags>` from each patch it receives. By
-default, three tags are extracted, but it's possible to change this on a
-per-instance basis. Should you add additional tags, you may wish to scan older
-patches for these new tags.
+Patchwork extracts :ref:`tags <overview-tags>` from each submission it
+receives. By default, three tags are extracted, but it's possible to change
+this on a per-instance basis. Should you add additional tags, you may wish to
+scan older submissions for these new tags.
 
-.. option:: patch_id
+.. option:: submission_id
 
-   a patch ID number. If not supplied, all patches will be updated.
+   a submission ID number. If not supplied, all submissions will be updated.
