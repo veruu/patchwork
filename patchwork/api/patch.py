@@ -19,6 +19,7 @@
 
 import email.parser
 
+from django.db.models import Q
 from django.utils.translation import ugettext_lazy as _
 from rest_framework.generics import ListAPIView
 from rest_framework.generics import RetrieveUpdateAPIView
@@ -35,6 +36,7 @@ from patchwork.api.embedded import SeriesSerializer
 from patchwork.api.embedded import UserSerializer
 from patchwork.models import Patch
 from patchwork.models import State
+from patchwork.models import SubmissionTag
 from patchwork.parser import clean_subject
 
 
@@ -109,9 +111,18 @@ class PatchListSerializer(BaseHyperlinkedModelSerializer):
             reverse('api-check-list', kwargs={'patch_id': instance.id}))
 
     def get_tags(self, instance):
-        # TODO(stephenfin): Make tags performant, possibly by reworking the
-        # model
-        return {}
+        if not instance.project.use_tags:
+            return {}
+
+        tags = SubmissionTag.objects.filter(
+            Q(submission=instance) | Q(series__in=instance.series.all())
+        ).values_list('tag__name', 'value').distinct()
+
+        result = {}
+        for name, value in tags:
+            result.setdefault(name, []).append(value)
+
+        return result
 
     class Meta:
         model = Patch
@@ -160,6 +171,7 @@ class PatchDetailSerializer(PatchListSerializer):
             'headers', 'content', 'diff', 'prefixes')
         versioned_fields = PatchListSerializer.Meta.versioned_fields
         extra_kwargs = PatchListSerializer.Meta.extra_kwargs
+        versioned_fields = PatchListSerializer.Meta.versioned_fields
 
 
 class PatchList(ListAPIView):

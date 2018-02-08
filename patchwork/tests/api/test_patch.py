@@ -166,7 +166,7 @@ class TestPatchAPI(APITestCase):
 
         self.assertEqual(patch.content, resp.data['content'])
         self.assertEqual(patch.diff, resp.data['diff'])
-        self.assertEqual(0, len(resp.data['tags']))
+        self.assertEqual(1, len(resp.data['tags']))
 
     def test_detail_version_1_0(self):
         patch = create_patch()

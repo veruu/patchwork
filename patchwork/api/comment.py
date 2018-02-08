@@ -26,6 +26,7 @@ from patchwork.api.base import BaseHyperlinkedModelSerializer
 from patchwork.api.base import PatchworkPermission
 from patchwork.api.embedded import PersonSerializer
 from patchwork.models import Comment
+from patchwork.models import SubmissionTag
 
 
 class CommentListSerializer(BaseHyperlinkedModelSerializer):
@@ -34,6 +35,7 @@ class CommentListSerializer(BaseHyperlinkedModelSerializer):
     subject = SerializerMethodField()
     headers = SerializerMethodField()
     submitter = PersonSerializer(read_only=True)
+    tags = SerializerMethodField()
 
     def get_web_url(self, instance):
         request = self.context.get('request')
@@ -42,6 +44,20 @@ class CommentListSerializer(BaseHyperlinkedModelSerializer):
     def get_subject(self, comment):
         return email.parser.Parser().parsestr(comment.headers,
                                               True).get('Subject', '')
+
+    def get_tags(self, instance):
+        if not instance.submission.project.use_tags:
+            return {}
+
+        tags = SubmissionTag.objects.filter(
+            comment=instance
+        ).values_list('tag__name', 'value')
+
+        result = {}
+        for name, value in tags:
+            result.setdefault(name, []).append(value)
+
+        return result
 
     def get_headers(self, comment):
         headers = {}
@@ -60,7 +76,7 @@ class CommentListSerializer(BaseHyperlinkedModelSerializer):
     class Meta:
         model = Comment
         fields = ('id', 'web_url', 'msgid', 'date', 'subject', 'submitter',
-                  'content', 'headers')
+                  'content', 'headers', 'tags')
         read_only_fields = fields
         versioned_fields = {
             '1.1': ('web_url', ),
