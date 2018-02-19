@@ -399,7 +399,7 @@ class TestPatchAPI(APITestCase):
         self.assertEqual(patch.headers, resp.data['headers'] or '')
         self.assertEqual(patch.content, resp.data['content'])
         self.assertEqual(patch.diff, resp.data['diff'])
-        self.assertEqual(0, len(resp.data['tags']))
+        self.assertEqual({'Reviewed-by': 1}, resp.data['tags'])
 
     def test_create(self):
         """Ensure creations are rejected."""

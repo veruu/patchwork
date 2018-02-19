@@ -17,14 +17,23 @@
 # along with Patchwork; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+import mailbox
+import os
+
 from django.test import TestCase
 from django.test import TransactionTestCase
 
 from patchwork.models import Patch
+from patchwork.models import Series
+from patchwork.models import SeriesPatch
+from patchwork.models import Submission
 from patchwork.models import SubmissionTag
 from patchwork.models import Tag
+from patchwork.parser import parse_mail
+from patchwork.tests import TEST_MAIL_DIR
 from patchwork.tests.utils import create_comment
 from patchwork.tests.utils import create_patch
+from patchwork.tests.utils import create_project
 
 
 class ExtractTagsTest(TestCase):
@@ -205,3 +214,48 @@ class PatchTagManagerTest(PatchTagsTest):
             )
 
         self.assertEqual(counts, (acks, reviews, tests))
+
+
+class CoverLetterTagsTest(TestCase):
+
+    fixtures = ['default_tags', 'default_states']
+
+    def assert_tags_equal(self, submission, acked, reviewed, tested):
+        sub_obj = Submission.objects.get(pk=submission.pk)
+
+        def count(tag_name):
+            try:
+                return sub_obj.submissiontag_set.get(tag__name=tag_name).count
+            except SubmissionTag.DoesNotExist:
+                return 0
+
+        counts = (count('Acked-by'), count('Reviewed-by'), count('Tested-by'))
+        self.assertEqual(counts, (acked, reviewed, tested))
+
+    def _parse_mbox(self, how_many, listid):
+        mbox = mailbox.mbox(os.path.join(TEST_MAIL_DIR,
+                                         '0019-cover-tags.mbox'),
+                            create=False)
+        for i, msg in enumerate(mbox, start=1):
+            if i > how_many:
+                break
+            parse_mail(msg, listid)
+        mbox.close()
+
+    def test_tagged_cover(self):
+        project = create_project()
+        self._parse_mbox(3, project.listid)
+        series = Series.objects.get(project=project)
+        self.assert_tags_equal(series.cover_letter, 1, 0, 0)
+        self.assert_tags_equal(SeriesPatch.objects.get(series=series,
+                                                       number=1).patch,
+                               1, 0, 0)
+
+    def test_cover_and_patch_tagging(self):
+        project = create_project()
+        self._parse_mbox(4, project.listid)
+        series = Series.objects.get(project=project)
+        self.assert_tags_equal(series.cover_letter, 1, 0, 0)
+        self.assert_tags_equal(SeriesPatch.objects.get(series=series,
+                                                       number=1).patch,
+                               2, 0, 0)

@@ -1,0 +1,49 @@
+From test@cover.test Sun Sep 11 23:22:13 2016
+From: Test Cover <test@cover.test>
+Subject: [PATCH 0/1] Testing of cover letter tags
+Date: Sun, 11 Sep 2016 23:22:02 +0100
+Message-ID: <abc@covertags.test>
+
+Cover letter.
+
+
+From test@cover.test Sun Sep 11 23:22:13 2016
+From: Test Cover <test@cover.test>
+Subject: [PATCH 1/1] Testing of cover letter tags patch
+Date: Sun, 11 Sep 2016 23:22:03 +0100
+Message-ID: <abc-patch@covertags.test>
+In-Reply-To: <abc@covertags.test>
+References: <abc@covertags.test>
+
+diff --git a/test.txt b/test.txt
+index f75ba05..a6c61c0 100644
+--- a/test.txt
++++ b/test.txt
+@@ -1 +1,2 @@
++Hello, world.
++
+-- 
+2.13.6
+
+
+From cover@comment.test Sun Sep 11 23:22:16 2016
+From: Cover Comment <cover@comment.test>
+Subject: Re: [PATCH 0/1] Testing of cover letter tags
+Date: Sun, 11 Sep 2016 23:22:14 +0100
+Message-ID: <tag@cover.test>
+In-Reply-To: <abc@covertags.test>
+References: <abc@covertags.test>
+
+Acked-by: Cover Comment <cover@comment.test>
+
+
+From patch@comment.test Sun Sep 11 23:22:18 2016
+From: Patch Comment <patch@comment.test>
+Subject: Re: [PATCH 1/1] Testing of cover letter tags patch
+Date: Sun, 11 Sep 2016 23:22:18 +0100
+Message-ID: <tag@patch.test>
+In-Reply-To: <abc-patch@covertags.test>
+References: <abc-patch@covertags.test>
+
+Acked-by: Patch Comment <patch@comment.test>
+
