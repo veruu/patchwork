@@ -1,0 +1,10 @@
+---
+api:
+  - |
+    Added /comments endpoint. For comment list, fields
+        'id', 'url', 'msgid', 'date', 'subject', 'submitter', 'parent', 'tags'
+    are available. For comment detail (/comments/29), comment's
+        'content', 'headers', 'project'
+    are added as well. Filtering is possible based on
+        'project', 'parent', 'submitter'
+    fields.

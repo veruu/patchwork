@@ -213,6 +213,7 @@ if settings.ENABLE_REST_API:
 
     from patchwork.api import bundle as api_bundle_views  # noqa
     from patchwork.api import check as api_check_views  # noqa
+    from patchwork.api import comment as api_comment_views  # noqa
     from patchwork.api import cover as api_cover_views  # noqa
     from patchwork.api import event as api_event_views  # noqa
     from patchwork.api import index as api_index_views  # noqa
@@ -238,6 +239,12 @@ if settings.ENABLE_REST_API:
         url(r'^people/(?P<pk>[^/]+)/$',
             api_person_views.PersonDetail.as_view(),
             name='api-person-detail'),
+        url(r'^comments/$',
+            api_comment_views.CommentList.as_view(),
+            name='api-comment-list'),
+        url(r'^comments/(?P<pk>[^/]+)/$',
+            api_comment_views.CommentDetail.as_view(),
+            name='api-comment-detail'),
         url(r'^covers/$',
             api_cover_views.CoverLetterList.as_view(),
             name='api-cover-list'),
@@ -277,6 +284,9 @@ if settings.ENABLE_REST_API:
         url(r'^events/$',
             api_event_views.EventList.as_view(),
             name='api-event-list'),
+        url(r'^comments/$',
+            api_comment_views.CommentList.as_view(),
+            name='api-comment-list'),
     ]
 
     urlpatterns += [

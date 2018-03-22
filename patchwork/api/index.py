@@ -34,4 +34,5 @@ class IndexView(APIView):
             'series': reverse('api-series-list', request=request),
             'events': reverse('api-event-list', request=request),
             'bundles': reverse('api-bundle-list', request=request),
+            'comments': reverse('api-comment-list', request=request),
         })

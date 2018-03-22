@@ -26,6 +26,7 @@ from django.forms import ModelChoiceField
 
 from patchwork.models import Bundle
 from patchwork.models import Check
+from patchwork.models import Comment
 from patchwork.models import CoverLetter
 from patchwork.models import Event
 from patchwork.models import Patch
@@ -33,6 +34,7 @@ from patchwork.models import Person
 from patchwork.models import Project
 from patchwork.models import Series
 from patchwork.models import State
+from patchwork.models import Submission
 
 
 class TimestampMixin(FilterSet):
@@ -186,3 +188,17 @@ class BundleFilter(ProjectMixin, FilterSet):
     class Meta:
         model = Bundle
         fields = ('project', 'owner', 'public')
+
+
+class CommentFilter(ProjectMixin, TimestampMixin, FilterSet):
+
+    submitter = PersonFilter(queryset=Person.objects.all())
+    parent = ModelChoiceFilter(name='submission',
+                               queryset=Submission.objects.all())
+    project = ProjectFilter(to_field_name='linkname',
+                            name='submission__project',
+                            queryset=Project.objects.all())
+
+    class Meta:
+        model = Comment
+        fields = ('project', 'parent', 'submitter')

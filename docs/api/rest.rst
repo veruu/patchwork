@@ -48,7 +48,8 @@ Patchwork instance hosted at `patchwork.example.com`, run:
         "people": "https://patchwork.example.com/api/1.0/people/",
         "projects": "https://patchwork.example.com/api/1.0/projects/",
         "series": "https://patchwork.example.com/api/1.0/series/",
-        "users": "https://patchwork.example.com/api/1.0/users/"
+        "users": "https://patchwork.example.com/api/1.0/users/",
+        "comments": "https://patchwork.example.com/api/1.0/comments/"
     }
 
 
@@ -71,7 +72,8 @@ well-supported. To repeat the above example using `requests`:, run
         "people": "https://patchwork.example.com/api/1.0/people/",
         "projects": "https://patchwork.example.com/api/1.0/projects/",
         "series": "https://patchwork.example.com/api/1.0/series/",
-        "users": "https://patchwork.example.com/api/1.0/users/"
+        "users": "https://patchwork.example.com/api/1.0/users/",
+        "comments": "https://patchwork.example.com/api/1.0/comments/"
     }
 
 Tools like `curl` and libraries like `requests` can be used to build anything
