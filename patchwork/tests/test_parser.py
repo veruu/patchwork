@@ -802,12 +802,12 @@ class ParseInitialTagsTest(PatchTest):
     def test_tags(self):
         self.assertEqual(Patch.objects.count(), 1)
         patch = Patch.objects.all()[0]
-        self.assertEqual(patch.patchtag_set.filter(
-            tag__name='Acked-by').count(), 0)
-        self.assertEqual(patch.patchtag_set.get(
-            tag__name='Reviewed-by').count, 1)
-        self.assertEqual(patch.patchtag_set.get(
-            tag__name='Tested-by').count, 1)
+        self.assertEqual(patch.related_tags.filter(name='Acked-by').count(),
+                         0)
+        self.assertEqual(patch.related_tags.filter(name='Reviewed-by').count(),
+                         1)
+        self.assertEqual(patch.related_tags.filter(name='Tested-by').count(),
+                         1)
 
 
 class ParseCommentTagsTest(PatchTest):
@@ -830,12 +830,11 @@ class ParseCommentTagsTest(PatchTest):
     def test_tags(self):
         self.assertEqual(Patch.objects.count(), 1)
         patch = Patch.objects.all()[0]
-        self.assertEqual(patch.patchtag_set.filter(
-            tag__name='Acked-by').count(), 0)
-        self.assertEqual(patch.patchtag_set.get(
-            tag__name='Reviewed-by').count, 1)
-        self.assertEqual(patch.patchtag_set.get(
-            tag__name='Tested-by').count, 1)
+        self.assertEqual(patch.related_tags.filter(name='Acked-by').count(), 0)
+        self.assertEqual(patch.related_tags.filter(name='Reviewed-by')count(),
+                         1)
+        self.assertEqual(patch.related_tags.filter(name='Tested-by').count(),
+                         1)
 
 
 class SubjectTest(TestCase):

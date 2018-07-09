@@ -19,11 +19,13 @@
 
 from django.core.management.base import BaseCommand
 
+from patchwork.models import Cover
 from patchwork.models import Patch
+from patchwork.models import SeriesPatch
 
 
 class Command(BaseCommand):
-    help = 'Update the tag (Ack/Review/Test) counts on existing patches'
+    help = 'Update tags on existing patches'
     args = '[<patch_id>...]'
 
     def handle(self, *args, **options):
@@ -37,7 +39,17 @@ class Command(BaseCommand):
         count = query.count()
 
         for i, patch in enumerate(query.iterator()):
-            patch.refresh_tag_counts()
+            patch.refresh_tags()
+            for comment in patch.comments.all():
+                comment.refresh_tags()
+
+            series_patches = SeriesPatch.objects.filter(patch_id=patch.id)
+            for series_patch in series_patches:
+                cover = series_patch.series.cover_letter
+                cover.refresh_tags()
+                for comment in cover.comments.all():
+                    comment.refresh_tags()
+
             if (i % 10) == 0:
                 self.stdout.write('%06d/%06d\r' % (i, count), ending='')
                 self.stdout.flush()

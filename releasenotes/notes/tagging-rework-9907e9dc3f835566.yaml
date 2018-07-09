@@ -1,0 +1,18 @@
+---
+features:
+  - |
+    Tagging is completely reworked. Instead of counts, real values are
+    extracted. This fixes wrong counts when for example the same person
+    accidentally sent the Acked-by email twice, since only a single same pair
+    tagname-value can be assigned to a patch. Tags from cover letters are now
+    counted towards each patch in the series and added to mbox files and patch
+    API as well. Sources of tags are tracked and `tags` field is populated in
+    the API for cover letters and comments so it's much easier to find where
+    a specific tag originated from. Three different filters are added for patch
+    and cover letter filtering in the REST API - `tagname=xxx` is a
+    case-insensitive filter on tag name (eg. find patches that were Tested-by
+    someone), `tagvalue=xxx` checks for case-insensitive substrings in the
+    value of the tags (is Johny slacking off and not acking/reviewing
+    patches?), and `tag=name,value` combines the two and filters on the
+    tagname-value pair (is there a patch that fixes the bug with this issue
+    link?).
