@@ -21,9 +21,11 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django_filters.rest_framework import FilterSet
+from django_filters import Filter
 from django_filters import IsoDateTimeFilter
 from django_filters import ModelMultipleChoiceFilter
 from django.forms import ModelMultipleChoiceField as BaseMultipleChoiceField
+from django.forms.widgets import HiddenInput
 from django.forms.widgets import MultipleHiddenInput
 
 from patchwork.models import Bundle
@@ -35,6 +37,7 @@ from patchwork.models import Person
 from patchwork.models import Project
 from patchwork.models import Series
 from patchwork.models import State
+from patchwork.models import SubmissionTag
 
 
 # custom fields, filters
@@ -136,6 +139,60 @@ class StateFilter(ModelMultipleChoiceFilter):
     field_class = StateChoiceField
 
 
+class TagNameFilter(Filter):
+
+    def filter(self, qs, tag_name):
+        submissions_series = SubmissionTag.objects.filter(
+            tag__name__iexact=tag_name
+        ).values_list('submission__id', 'series')
+
+        submission_list = []
+        series_list = []
+        for submission, series in submissions_series:
+            submission_list.append(submission)
+            series_list.append(series)
+
+        return qs.filter(Q(id__in=submission_list) | Q(series__in=series_list))
+
+
+class TagValueFilter(Filter):
+
+    def filter(self, qs, tag_value):
+        submissions_series = SubmissionTag.objects.filter(
+            value__icontains=tag_value
+        ).values_list('submission__id', 'series')
+
+        submission_list = []
+        series_list = []
+        for submission, series in submissions_series:
+            submission_list.append(submission)
+            series_list.append(series)
+
+        return qs.filter(Q(id__in=submission_list) | Q(series__in=series_list))
+
+
+class TagFilter(Filter):
+
+    def filter(self, qs, query):
+        try:
+            tag_name, tag_value = query.split(',', 1)
+        except ValueError:
+            raise ValidationError('Query in format `tag=name,value` expected!')
+
+        submissions_series = SubmissionTag.objects.filter(
+            tag__name__iexact=tag_name,
+            value__icontains=tag_value
+        ).values_list('submission__id', 'series')
+
+        submission_list = []
+        series_list = []
+        for submission, series in submissions_series:
+            submission_list.append(submission)
+            series_list.append(series)
+
+        return qs.filter(Q(id__in=submission_list) | Q(series__in=series_list))
+
+
 class UserChoiceField(ModelMultipleChoiceField):
 
     alternate_lookup = 'username__iexact'
@@ -173,10 +230,14 @@ class CoverLetterFilterSet(TimestampMixin, FilterSet):
     series = BaseFilter(queryset=Project.objects.all(),
                         widget=MultipleHiddenInput)
     submitter = PersonFilter(queryset=Person.objects.all())
+    tagname = TagNameFilter(label='Tag name')
+    tagvalue = TagValueFilter(widget=HiddenInput)
+    tag = TagFilter(widget=HiddenInput)
 
     class Meta:
         model = CoverLetter
-        fields = ('project', 'series', 'submitter')
+        fields = ('project', 'series', 'submitter', 'tagname', 'tagvalue',
+                  'tag')
 
 
 class PatchFilterSet(TimestampMixin, FilterSet):
@@ -189,11 +250,14 @@ class PatchFilterSet(TimestampMixin, FilterSet):
     submitter = PersonFilter(queryset=Person.objects.all())
     delegate = UserFilter(queryset=User.objects.all())
     state = StateFilter(queryset=State.objects.all())
+    tagname = TagNameFilter(label='Tag name')
+    tagvalue = TagValueFilter(widget=HiddenInput)
+    tag = TagFilter(widget=HiddenInput)
 
     class Meta:
         model = Patch
         fields = ('project', 'series', 'submitter', 'delegate',
-                  'state', 'archived')
+                  'state', 'archived', 'tagname', 'tagvalue', 'tag')
 
 
 class CheckFilterSet(TimestampMixin, FilterSet):

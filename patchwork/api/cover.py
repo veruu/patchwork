@@ -30,6 +30,7 @@ from patchwork.api.embedded import PersonSerializer
 from patchwork.api.embedded import ProjectSerializer
 from patchwork.api.embedded import SeriesSerializer
 from patchwork.models import CoverLetter
+from patchwork.models import SubmissionTag
 
 
 class CoverLetterListSerializer(BaseHyperlinkedModelSerializer):
@@ -40,6 +41,7 @@ class CoverLetterListSerializer(BaseHyperlinkedModelSerializer):
     mbox = SerializerMethodField()
     series = SeriesSerializer(many=True, read_only=True)
     comments = SerializerMethodField()
+    tags = SerializerMethodField()
 
     def get_web_url(self, instance):
         request = self.context.get('request')
@@ -53,13 +55,26 @@ class CoverLetterListSerializer(BaseHyperlinkedModelSerializer):
         return self.context.get('request').build_absolute_uri(
             reverse('api-cover-comment-list', kwargs={'pk': cover.id}))
 
+    def get_tags(self, instance):
+        if not instance.project.use_tags:
+            return {}
+
+        tags = SubmissionTag.objects.filter(
+            submission=instance).values_list('tag__name', 'value').distinct()
+
+        result = {}
+        for name, value in tags:
+            result.setdefault(name, []).append(value)
+
+        return result
+
     class Meta:
         model = CoverLetter
         fields = ('id', 'url', 'web_url', 'project', 'msgid', 'date', 'name',
-                  'submitter', 'mbox', 'series', 'comments')
+                  'submitter', 'mbox', 'series', 'comments', 'tags')
         read_only_fields = fields
         versioned_fields = {
-            '1.1': ('web_url', 'mbox', 'comments'),
+            '1.1': ('web_url', 'mbox', 'comments', 'tags'),
         }
         extra_kwargs = {
             'url': {'view_name': 'api-cover-detail'},
