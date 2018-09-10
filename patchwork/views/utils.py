@@ -141,7 +141,7 @@ def series_patch_to_mbox(patch, series_id):
     Returns:
         A string for the mbox file.
     """
-    if series_id != '*':
+    if series_id.lower() not in ('*', 'true', '1'):
         try:
             series_id = int(series_id)
         except ValueError:
