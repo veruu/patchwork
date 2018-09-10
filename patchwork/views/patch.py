@@ -130,7 +130,7 @@ def patch_mbox(request, patch_id):
     series_id = request.GET.get('series')
 
     response = HttpResponse(content_type='text/plain')
-    if series_id:
+    if series_id and series_id.lower() not in ('false', '0'):
         if not patch.series:
             raise Http404('Patch does not have an associated series. This is '
                           'because the patch was processed with an older '

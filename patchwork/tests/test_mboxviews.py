@@ -223,6 +223,23 @@ class MboxSeriesDependencies(TestCase):
         self.assertContains(response, patch_a.content)
         self.assertContains(response, patch_b.content)
 
+    def test_patch_with_boolean_series(self):
+        _, patch_a, patch_b = self._create_patches()
+
+        for value in ('true', '1'):
+            response = self.client.get('%s?series=%s' % (
+                reverse('patch-mbox', args=[patch_b.id]), value))
+
+            self.assertContains(response, patch_a.content)
+            self.assertContains(response, patch_b.content)
+
+        for value in ('false', '0'):
+            response = self.client.get('%s?series=%s' % (
+                reverse('patch-mbox', args=[patch_b.id]), value))
+
+            self.assertNotContains(response, patch_a.content)
+            self.assertContains(response, patch_b.content)
+
     def test_patch_with_invalid_series(self):
         series, patch_a, patch_b = self._create_patches()
 
