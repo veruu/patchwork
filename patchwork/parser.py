@@ -41,7 +41,6 @@ from patchwork.models import Person
 from patchwork.models import Project
 from patchwork.models import Series
 from patchwork.models import SeriesReference
-from patchwork.models import SeriesPatch
 from patchwork.models import State
 from patchwork.models import Submission
 
@@ -1043,8 +1042,7 @@ def parse_mail(mail, list_id=None):
         # - there is no existing series to assign this patch to, or
         # - there is an existing series, but it already has a patch with this
         #   number in it
-        if not series or (
-                SeriesPatch.objects.filter(series=series, number=x).count()):
+        if not series or Patch.objects.filter(series=series, number=x).count():
             series = Series(project=project,
                             date=date,
                             submitter=author,
@@ -1078,6 +1076,8 @@ def parse_mail(mail, list_id=None):
         # patch. Don't add unnumbered patches (for example diffs sent
         # in reply, or just messages with random refs/in-reply-tos)
         if series and x:
+            # TODO(stephenfin): Remove 'series' from the conditional as we will
+            # always have a series
             series.add_patch(patch, x)
 
         return patch

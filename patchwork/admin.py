@@ -129,7 +129,7 @@ admin.site.register(Comment, CommentAdmin)
 
 
 class PatchInline(admin.StackedInline):
-    model = Series.patches.through
+    model = Patch
     extra = 0
 
 
