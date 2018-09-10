@@ -69,7 +69,7 @@ class PatchListSerializer(BaseHyperlinkedModelSerializer):
     submitter = PersonSerializer(read_only=True)
     delegate = UserSerializer()
     mbox = SerializerMethodField()
-    series = SeriesSerializer(many=True, read_only=True)
+    series = SeriesSerializer(read_only=True)
     comments = SerializerMethodField()
     check = SerializerMethodField()
     checks = SerializerMethodField()
@@ -98,6 +98,14 @@ class PatchListSerializer(BaseHyperlinkedModelSerializer):
         # TODO(stephenfin): Make tags performant, possibly by reworking the
         # model
         return {}
+
+    def to_representation(self, instance):
+        # NOTE(stephenfin): This is here to ensure our API looks the same even
+        # after we changed the series-patch relationship from M:N to 1:N. It
+        # will be removed in API v2
+        data = super(PatchListSerializer, self).to_representation(instance)
+        data['series'] = [data['series']]
+        return data
 
     class Meta:
         model = Patch
@@ -161,8 +169,9 @@ class PatchList(ListAPIView):
 
     def get_queryset(self):
         return Patch.objects.all()\
-            .prefetch_related('series', 'check_set')\
-            .select_related('project', 'state', 'submitter', 'delegate')\
+            .prefetch_related('check_set')\
+            .select_related('project', 'state', 'submitter', 'delegate',
+                            'series')\
             .defer('content', 'diff', 'headers')
 
 
@@ -174,5 +183,6 @@ class PatchDetail(RetrieveUpdateAPIView):
 
     def get_queryset(self):
         return Patch.objects.all()\
-            .prefetch_related('series', 'check_set')\
-            .select_related('project', 'state', 'submitter', 'delegate')
+            .prefetch_related('check_set')\
+            .select_related('project', 'state', 'submitter', 'delegate',
+                            'series')
