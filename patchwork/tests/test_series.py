@@ -637,10 +637,6 @@ class SeriesNameTestCase(TestCase):
     def _parse_mail(self, mail):
         return parser.parse_mail(mail, self.project.listid)
 
-    @staticmethod
-    def _format_name(cover):
-        return models.Series._format_name(cover)
-
     def test_cover_letter(self):
         """Cover letter name set as series name.
 
@@ -656,7 +652,7 @@ class SeriesNameTestCase(TestCase):
         mbox = self._get_mbox('base-cover-letter.mbox')
 
         cover = self._parse_mail(mbox[0])
-        cover_name = self._format_name(cover)
+        cover_name = 'A sample series'
         self.assertEqual(cover.series.first().name, cover_name)
 
         self._parse_mail(mbox[1])
@@ -711,7 +707,7 @@ class SeriesNameTestCase(TestCase):
         self.assertEqual(patch.series.first().name, patch.name)
 
         cover = self._parse_mail(mbox[2])
-        self.assertEqual(cover.series.first().name, self._format_name(cover))
+        self.assertEqual(cover.series.first().name, 'A sample series')
 
         mbox.close()
 
