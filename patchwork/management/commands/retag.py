@@ -19,15 +19,15 @@
 
 from django.core.management.base import BaseCommand
 
-from patchwork.models import Patch
+from patchwork.models import Submission
 
 
 class Command(BaseCommand):
-    help = 'Update the tag (Ack/Review/Test) counts on existing patches'
-    args = '[<patch_id>...]'
+    help = 'Update tags on existing submissions and associated comments'
+    args = '[<submission_id>...]'
 
     def handle(self, *args, **options):
-        query = Patch.objects
+        query = Submission.objects.prefetch_related('comments')
 
         if args:
             query = query.filter(id__in=args)
@@ -36,8 +36,11 @@ class Command(BaseCommand):
 
         count = query.count()
 
-        for i, patch in enumerate(query.iterator()):
-            patch.refresh_tag_counts()
+        for i, submission in enumerate(query.iterator()):
+            submission.refresh_tags()
+            for comment in submission.comments.all():
+                comment.refresh_tags()
+
             if (i % 10) == 0:
                 self.stdout.write('%06d/%06d\r' % (i, count), ending='')
                 self.stdout.flush()
