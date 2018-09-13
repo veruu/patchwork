@@ -5,15 +5,16 @@
 
 from django.core.management.base import BaseCommand
 
-from patchwork.models import Patch
+from patchwork.models import Submission
+from patchwork.parser import create_tags, extract_tags
 
 
 class Command(BaseCommand):
-    help = 'Update the tag (Ack/Review/Test) counts on existing patches'
-    args = '[<patch_id>...]'
+    help = 'Update tags on existing submissions and associated comments'
+    args = '[<submission_id>...]'
 
     def handle(self, *args, **options):
-        query = Patch.objects
+        query = Submission.objects.prefetch_related('comments')
 
         if args:
             query = query.filter(id__in=args)
@@ -22,8 +23,25 @@ class Command(BaseCommand):
 
         count = query.count()
 
-        for i, patch in enumerate(query.iterator()):
-            patch.refresh_tag_counts()
+        for i, submission in enumerate(query.iterator()):
+            new_tags = extract_tags(submission.content,
+                                    submission.project.tags)
+            if hasattr(submission, 'patch'):
+                create_tags(new_tags, submission.patch.series,
+                            patch=submission.patch)
+            else:
+                create_tags(new_tags, submission.coverletter.series)
+
+            for comment in submission.comments.all():
+                comment_tags = extract_tags(comment.content,
+                                            submission.project.tags)
+                if hasattr(submission, 'patch'):
+                    create_tags(new_tags, submission.patch.series,
+                                patch=submission.patch, comment=comment)
+                else:
+                    create_tags(new_tags, submission.coverletter.series,
+                                comment=comment)
+
             if (i % 10) == 0:
                 self.stdout.write('%06d/%06d\r' % (i, count), ending='')
                 self.stdout.flush()

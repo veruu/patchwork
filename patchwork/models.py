@@ -4,8 +4,6 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-from collections import Counter
-from collections import OrderedDict
 import datetime
 import random
 import re
@@ -14,6 +12,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.encoding import python_2_unicode_compatible
 from django.utils.functional import cached_property
@@ -234,10 +233,6 @@ class Tag(models.Model):
                                       ' tag\'s count in the patch list view',
                                       default=True)
 
-    @property
-    def attr_name(self):
-        return 'tag_%d_count' % self.id
-
     def __str__(self):
         return self.name
 
@@ -245,58 +240,19 @@ class Tag(models.Model):
         ordering = ['abbrev']
 
 
-class PatchTag(models.Model):
-    patch = models.ForeignKey('Patch', on_delete=models.CASCADE)
+class SeriesTag(models.Model):
     tag = models.ForeignKey('Tag', on_delete=models.CASCADE)
-    count = models.IntegerField(default=1)
+    value = models.CharField(max_length=255)
+    series = models.ForeignKey('Series', on_delete=models.CASCADE)
+    comment = models.ForeignKey('Comment', null=True, on_delete=models.CASCADE)
+    patch = models.ForeignKey('Patch', null=True, on_delete=models.CASCADE)
 
     class Meta:
-        unique_together = [('patch', 'tag')]
+        unique_together = [('patch', 'tag', 'value', 'comment')]
 
 
 def get_default_initial_patch_state():
     return State.objects.get(ordering=0)
-
-
-class PatchQuerySet(models.query.QuerySet):
-
-    def with_tag_counts(self, project=None):
-        if project and not project.use_tags:
-            return self
-
-        # We need the project's use_tags field loaded for Project.tags().
-        # Using prefetch_related means we'll share the one instance of
-        # Project, and share the project.tags cache between all patch.project
-        # references.
-        qs = self.prefetch_related('project')
-        select = OrderedDict()
-        select_params = []
-
-        # All projects have the same tags, so we're good to go here
-        if project:
-            tags = project.tags
-        else:
-            tags = Tag.objects.all()
-
-        for tag in tags:
-            select[tag.attr_name] = (
-                "coalesce("
-                "(SELECT count FROM patchwork_patchtag"
-                " WHERE patchwork_patchtag.patch_id="
-                "patchwork_patch.submission_ptr_id"
-                " AND patchwork_patchtag.tag_id=%s), 0)")
-            select_params.append(tag.id)
-
-        return qs.extra(select=select, select_params=select_params)
-
-
-class PatchManager(models.Manager):
-
-    def get_queryset(self):
-        return PatchQuerySet(self.model, using=self.db)
-
-    def with_tag_counts(self, project):
-        return self.get_queryset().with_tag_counts(project)
 
 
 class EmailMixin(models.Model):
@@ -379,6 +335,17 @@ class Submission(FilenameMixin, EmailMixin, models.Model):
 
 class CoverLetter(Submission):
 
+    @property
+    def all_tags(self):
+        related_tags = {}
+
+        for tag in self.project.tags:
+            related_tags[tag] = SeriesTag.objects.filter(
+                series=self.series, tag__name=tag.name, patch__isnull=True
+            ).values_list('value', flat=True).distinct()
+
+        return related_tags
+
     def get_absolute_url(self):
         return reverse('cover-detail', kwargs={'cover_id': self.id})
 
@@ -393,7 +360,6 @@ class Patch(Submission):
     diff = models.TextField(null=True, blank=True)
     commit_ref = models.CharField(max_length=255, null=True, blank=True)
     pull_url = models.CharField(max_length=255, null=True, blank=True)
-    tags = models.ManyToManyField(Tag, through=PatchTag)
 
     # patchwork metadata
 
@@ -416,40 +382,6 @@ class Patch(Submission):
         default=None, null=True,
         help_text='The number assigned to this patch in the series')
 
-    objects = PatchManager()
-
-    @staticmethod
-    def extract_tags(content, tags):
-        counts = Counter()
-
-        for tag in tags:
-            regex = re.compile(tag.pattern, re.MULTILINE | re.IGNORECASE)
-            counts[tag] = len(regex.findall(content))
-
-        return counts
-
-    def _set_tag(self, tag, count):
-        if count == 0:
-            self.patchtag_set.filter(tag=tag).delete()
-            return
-        patchtag, _ = PatchTag.objects.get_or_create(patch=self, tag=tag)
-        if patchtag.count != count:
-            patchtag.count = count
-            patchtag.save()
-
-    def refresh_tag_counts(self):
-        tags = self.project.tags
-        counter = Counter()
-
-        if self.content:
-            counter += self.extract_tags(self.content, tags)
-
-        for comment in self.comments.all():
-            counter = counter + self.extract_tags(comment.content, tags)
-
-        for tag in tags:
-            self._set_tag(tag, counter[tag])
-
     def save(self, *args, **kwargs):
         if not hasattr(self, 'state') or not self.state:
             self.state = get_default_initial_patch_state()
@@ -459,8 +391,6 @@ class Patch(Submission):
 
         super(Patch, self).save(**kwargs)
 
-        self.refresh_tag_counts()
-
     def is_editable(self, user):
         if not user.is_authenticated:
             return False
@@ -469,6 +399,19 @@ class Patch(Submission):
             return True
 
         return self.project.is_editable(user)
+
+    @property
+    def all_tags(self):
+        related_tags = {}
+
+        for tag in self.project.tags:
+            related_tags[tag] = SeriesTag.objects.filter((
+                Q(patch=self)
+                | (Q(series=self.series) & Q(patch__isnull=True))
+            ) & Q(tag__name=tag.name)).values_list('value',
+                                                   flat=True).distinct()
+
+        return related_tags
 
     @property
     def combined_check_state(self):
@@ -594,13 +537,17 @@ class Comment(EmailMixin, models.Model):
 
     def save(self, *args, **kwargs):
         super(Comment, self).save(*args, **kwargs)
-        if hasattr(self.submission, 'patch'):
-            self.submission.patch.refresh_tag_counts()
 
-    def delete(self, *args, **kwargs):
-        super(Comment, self).delete(*args, **kwargs)
-        if hasattr(self.submission, 'patch'):
-            self.submission.patch.refresh_tag_counts()
+    @property
+    def all_tags(self):
+        related_tags = {}
+
+        for tag in self.submission.project.tags:
+            related_tags[tag] = SeriesTag.objects.filter(
+                comment=self, tag__name=tag.name
+            ).values_list('value', flat=True).distinct()
+
+        return related_tags
 
     def is_editable(self, user):
         return False
@@ -638,6 +585,7 @@ class Series(FilenameMixin, models.Model):
                                   'by the subject prefix(es)')
     total = models.IntegerField(help_text='Number of patches in series as '
                                 'indicated by the subject prefix(es)')
+    tags = models.ManyToManyField(Tag, through=SeriesTag)
 
     @staticmethod
     def _format_name(obj):

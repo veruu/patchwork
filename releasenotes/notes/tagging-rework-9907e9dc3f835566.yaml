@@ -1,0 +1,15 @@
+---                                                                            
+features:                                                                      
+  - |                                                                          
+    Tagging is completely reworked. Instead of counts, real values are         
+    extracted. This fixes wrong counts when for example the same person        
+    accidentally sent the Acked-by email twice, since only a single same pair  
+    tagname-value can be assigned to a patch. Tags from cover letters are now  
+    counted towards each patch in the series.
+upgrade:                                                                       
+  - |                                                                          
+    The ``retag`` command (``python manage.py retag``) needs to be ran after   
+    the upgrade. The migration only takes care of the database structure, while
+    the actual tag data will be created by the command, to make the migration  
+    itself faster. Please note that this will take a lot of time and based on  
+    the size of the data in question, might be useful to run in batches.  

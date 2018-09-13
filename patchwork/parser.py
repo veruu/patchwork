@@ -26,6 +26,7 @@ from patchwork.models import Patch
 from patchwork.models import Person
 from patchwork.models import Project
 from patchwork.models import Series
+from patchwork.models import SeriesTag
 from patchwork.models import SeriesReference
 from patchwork.models import State
 from patchwork.models import Submission
@@ -920,6 +921,27 @@ def find_delegate_by_header(mail):
     return None
 
 
+def extract_tags(content, tags):
+    found_tags = {}
+    if not content:
+        return found_tags
+
+    for tag in tags:
+        regex = re.compile(tag.pattern + r'\s*(.*)', re.M | re.I | re.U)
+        found_tags[tag] = regex.findall(content)
+    return found_tags
+
+
+def create_tags(tag_values, series, patch=None, comment=None):
+    SeriesTag.objects.bulk_create([SeriesTag(
+        series=series,
+        tag=tag,
+        value=value,
+        comment=comment,
+        patch=patch
+    ) for tag, values in tag_values.items() for value in values])
+
+
 def parse_mail(mail, list_id=None):
     """Parse a mail and add to the database.
 
@@ -1065,6 +1087,8 @@ def parse_mail(mail, list_id=None):
             # TODO(stephenfin): Remove 'series' from the conditional as we will
             # always have a series
             series.add_patch(patch, x)
+            patch_tags = extract_tags(patch.content, project.tags)
+            create_tags(patch_tags, series, patch=patch)
 
         return patch
     elif x == 0:  # (potential) cover letters
@@ -1133,6 +1157,8 @@ def parse_mail(mail, list_id=None):
             logger.debug('Cover letter saved')
 
             series.add_cover_letter(cover_letter)
+            cover_tags = extract_tags(cover_letter.content, project.tags)
+            create_tags(cover_tags, series)
 
             return cover_letter
 
@@ -1154,6 +1180,14 @@ def parse_mail(mail, list_id=None):
         content=message)
     comment.save()
     logger.debug('Comment saved')
+
+    comment_tags = extract_tags(comment.content, project.tags)
+    if hasattr(submission, 'patch'):
+        create_tags(comment_tags, submission.patch.series,
+                    patch=submission.patch, comment=comment)
+    else:
+        create_tags(comment_tags, submission.coverletter.series,
+                    comment=comment)
 
     return comment
 

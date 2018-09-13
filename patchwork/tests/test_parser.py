@@ -19,6 +19,7 @@ from patchwork.models import Comment
 from patchwork.models import Patch
 from patchwork.models import Person
 from patchwork.models import State
+from patchwork.models import SeriesTag
 from patchwork.parser import clean_subject
 from patchwork.parser import get_or_create_author
 from patchwork.parser import find_patch_content as find_content
@@ -788,12 +789,12 @@ class ParseInitialTagsTest(PatchTest):
     def test_tags(self):
         self.assertEqual(Patch.objects.count(), 1)
         patch = Patch.objects.all()[0]
-        self.assertEqual(patch.patchtag_set.filter(
-            tag__name='Acked-by').count(), 0)
-        self.assertEqual(patch.patchtag_set.get(
-            tag__name='Reviewed-by').count, 1)
-        self.assertEqual(patch.patchtag_set.get(
-            tag__name='Tested-by').count, 1)
+        self.assertEqual(SeriesTag.objects.filter(tag__name='Acked-by',
+                                                  patch=patch).count(), 0)
+        self.assertEqual(SeriesTag.objects.filter(tag__name='Reviewed-by',
+                                                  patch=patch).count(), 1)
+        self.assertEqual(SeriesTag.objects.filter(tag__name='Tested-by',
+                                                  patch=patch).count(), 1)
 
 
 class ParseCommentTagsTest(PatchTest):
@@ -816,12 +817,12 @@ class ParseCommentTagsTest(PatchTest):
     def test_tags(self):
         self.assertEqual(Patch.objects.count(), 1)
         patch = Patch.objects.all()[0]
-        self.assertEqual(patch.patchtag_set.filter(
-            tag__name='Acked-by').count(), 0)
-        self.assertEqual(patch.patchtag_set.get(
-            tag__name='Reviewed-by').count, 1)
-        self.assertEqual(patch.patchtag_set.get(
-            tag__name='Tested-by').count, 1)
+        self.assertEqual(SeriesTag.objects.filter(tag__name='Acked-by',
+                                                  patch=patch).count(), 0)
+        self.assertEqual(SeriesTag.objects.filter(tag__name='Reviewed-by',
+                                                  patch=patch).count(), 1)
+        self.assertEqual(SeriesTag.objects.filter(tag__name='Tested-by',
+                                                  patch=patch).count(), 1)
 
 
 class SubjectTest(TestCase):
