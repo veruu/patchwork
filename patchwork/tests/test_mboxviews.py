@@ -36,8 +36,9 @@ from patchwork.tests.utils import create_user
 
 
 class MboxPatchResponseTest(TestCase):
-
     """Test that the mbox view appends the Acked-by from a patch comment."""
+
+    fixtures = ['default_tags']
 
     def setUp(self):
         self.project = create_project()
@@ -53,7 +54,9 @@ class MboxPatchResponseTest(TestCase):
             submitter=self.person,
             content='comment 2 text\nAcked-by: 2\n')
         response = self.client.get(reverse('patch-mbox', args=[patch.id]))
-        self.assertContains(response, 'Acked-by: 1\nAcked-by: 2\n')
+        # Can't guarantee the order in which the tags are returned
+        self.assertContains(response, 'Acked-by: 1\n')
+        self.assertContains(response, 'Acked-by: 2\n')
 
     def test_patch_utf8_nbsp(self):
         patch = create_patch(
@@ -73,6 +76,8 @@ class MboxPatchSplitResponseTest(TestCase):
     """Test that the mbox view appends the Acked-by from a patch comment,
        and places it before an '---' update line."""
 
+    fixtures = ['default_tags']
+
     def setUp(self):
         project = create_project()
         self.person = create_person()
@@ -88,7 +93,15 @@ class MboxPatchSplitResponseTest(TestCase):
 
     def test_patch_response(self):
         response = self.client.get(reverse('patch-mbox', args=[self.patch.id]))
-        self.assertContains(response, 'Acked-by: 1\nAcked-by: 2\n')
+        # Can't guarantee the order in which the tags are returned
+        self.assertContains(response, 'Acked-by: 1\n')
+        self.assertContains(response, 'Acked-by: 2\n')
+        # We need to check for 3 Acked-by strings, one comes from the body of
+        # the patch and the other two are the tags themselves.
+        self.assertRegex(
+            response.content.decode(),
+            '(?s).*Acked-by: 1\n.*Acked-by.*Acked-by.*---\nupdate.*'
+        )
 
 
 class MboxHeaderTest(TestCase):

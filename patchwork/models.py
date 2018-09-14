@@ -284,18 +284,6 @@ class EmailMixin(models.Model):
     submitter = models.ForeignKey(Person, on_delete=models.CASCADE)
     content = models.TextField(null=True, blank=True)
 
-    response_re = re.compile(
-        r'^(Tested|Reviewed|Acked|Signed-off|Nacked|Reported)-by:.*$',
-        re.M | re.I)
-
-    @property
-    def patch_responses(self):
-        if not self.content:
-            return ''
-
-        return ''.join([match.group(0) + '\n' for match in
-                        self.response_re.finditer(self.content)])
-
     def _extract_tags(self, tags):
         found_tags = {}
         if not self.content:

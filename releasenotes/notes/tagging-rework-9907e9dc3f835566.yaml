@@ -24,3 +24,6 @@ upgrade:
     the actual tag data will be created by the command, to make the migration  
     itself faster. Please note that this will take a lot of time and based on  
     the size of the data in question, might be useful to run in batches.  
+other:
+  - |
+    The tagging feature is now used to populate tags in mbox files.
