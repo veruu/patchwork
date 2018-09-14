@@ -13,6 +13,8 @@ import email
 from django.test import TestCase
 from django.urls import reverse
 
+from patchwork.models import SeriesTag
+from patchwork.models import Tag
 from patchwork.tests.utils import create_comment
 from patchwork.tests.utils import create_patch
 from patchwork.tests.utils import create_project
@@ -22,34 +24,49 @@ from patchwork.tests.utils import create_user
 
 
 class MboxPatchResponseTest(TestCase):
-
     """Test that the mbox view appends the Acked-by from a patch comment."""
+
+    fixtures = ['default_tags']
 
     def setUp(self):
         self.project = create_project()
         self.person = create_person()
 
     def test_patch_response(self):
+        series = create_series()
         patch = create_patch(
             project=self.project,
             submitter=self.person,
-            content='comment 1 text\nAcked-by: 1\n')
-        create_comment(
+            content='comment 1 text\nAcked-by: 1\n',
+            series=series)
+        comment = create_comment(
             submission=patch,
             submitter=self.person,
             content='comment 2 text\nAcked-by: 2\n')
+        # Need to create the tags here because they are extracted in parser
+        tag = Tag.objects.get(name='Acked-by')
+        SeriesTag.objects.create(tag=tag, value='1', series=patch.series,
+                                 patch=patch)
+        SeriesTag.objects.create(tag=tag, value='2', series=patch.series,
+                                 patch=patch, comment=comment)
         response = self.client.get(reverse('patch-mbox', args=[patch.id]))
-        self.assertContains(response, 'Acked-by: 1\nAcked-by: 2\n')
+        # Can't guarantee the order in which the tags are returned
+        self.assertContains(response, 'Acked-by: 1\n')
+        self.assertContains(response, 'Acked-by: 2\n')
 
     def test_patch_utf8_nbsp(self):
         patch = create_patch(
             project=self.project,
             submitter=self.person,
             content='patch text\n')
-        create_comment(
+        comment = create_comment(
             submission=patch,
             submitter=self.person,
             content=u'comment\nAcked-by:\u00A0 foo')
+        # Need to create the tags here because they are extracted in parser
+        tag = Tag.objects.get(name='Acked-by')
+        SeriesTag.objects.create(tag=tag, value=u'\u00A0 foo', patch=patch,
+                                 series=patch.series, comment=comment)
         response = self.client.get(reverse('patch-mbox', args=[patch.id]))
         self.assertContains(response, u'\u00A0 foo\n')
 
@@ -59,22 +76,40 @@ class MboxPatchSplitResponseTest(TestCase):
     """Test that the mbox view appends the Acked-by from a patch comment,
        and places it before an '---' update line."""
 
+    fixtures = ['default_tags']
+
     def setUp(self):
+        series = create_series()
         project = create_project()
         self.person = create_person()
         self.patch = create_patch(
             project=project,
             submitter=self.person,
             diff='',
-            content='comment 1 text\nAcked-by: 1\n---\nupdate\n')
+            content='comment 1 text\nAcked-by: 1\n---\nupdate\n',
+            series=series)
         self.comment = create_comment(
             submission=self.patch,
             submitter=self.person,
             content='comment 2 text\nAcked-by: 2\n')
+        # Need to create the tags here because they are extracted in parser
+        tag = Tag.objects.get(name='Acked-by')
+        SeriesTag.objects.create(tag=tag, value='1', series=patch.series,
+                                 patch=patch)
+        SeriesTag.objects.create(tag=tag, value='2', series=patch.series,
+                                 patch=patch, comment=comment)
 
     def test_patch_response(self):
         response = self.client.get(reverse('patch-mbox', args=[self.patch.id]))
-        self.assertContains(response, 'Acked-by: 1\nAcked-by: 2\n')
+        # Can't guarantee the order in which the tags are returned
+        self.assertContains(response, 'Acked-by: 1\n')
+        self.assertContains(response, 'Acked-by: 2\n')
+        # We need to check for 3 Acked-by strings, one comes from the body of
+        # the patch and the other two are the tags themselves.
+        self.assertRegex(
+            response.content.decode(),
+            '(?s).*Acked-by: 1\n.*Acked-by.*Acked-by.*---\nupdate.*'
+        )
 
 
 class MboxHeaderTest(TestCase):

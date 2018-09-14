@@ -13,11 +13,13 @@ import email.utils
 import re
 
 from django.conf import settings
+from django.db.models import Q
 from django.http import Http404
 from django.utils import six
 
 from patchwork.models import Comment
 from patchwork.models import Patch
+from patchwork.models import SeriesTag
 
 if settings.ENABLE_REST_API:
     from rest_framework.authtoken.models import Token
@@ -60,9 +62,17 @@ def _submission_to_mbox(submission):
     else:
         postscript = ''
 
-    # TODO(stephenfin): Make this use the tags infrastructure
-    for comment in Comment.objects.filter(submission=submission):
-        body += comment.patch_responses
+    if is_patch:
+        for (tagname, value) in SeriesTag.objects.filter(
+                Q(patch=submission)
+                | (Q(series=submission.series) & Q(patch__isnull=True))
+        ).values_list('tag__name', 'value').distinct():
+            body += '%s: %s\n' % (tagname, value)
+    else:
+        for (tagname, value) in SeriesTag.objects.filter(
+                patch__isnull=True, series=submission.series
+        ).values_list('tag__name', 'value').distinct():
+            body += '%s: %s\n' % (tagname, value)
 
     if postscript:
         body += '---\n' + postscript + '\n'
