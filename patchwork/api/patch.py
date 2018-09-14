@@ -35,6 +35,7 @@ from patchwork.api.embedded import SeriesSerializer
 from patchwork.api.embedded import UserSerializer
 from patchwork.models import Patch
 from patchwork.models import State
+from patchwork.models import SubmissionTag
 from patchwork.parser import clean_subject
 
 
@@ -109,9 +110,11 @@ class PatchListSerializer(BaseHyperlinkedModelSerializer):
             reverse('api-check-list', kwargs={'patch_id': instance.id}))
 
     def get_tags(self, instance):
-        # TODO(stephenfin): Make tags performant, possibly by reworking the
-        # model
-        return {}
+        tags = {}
+        for tag_object in instance.all_tags:
+            tags[tag_object.name] = instance.all_tags[tag_object]
+
+        return tags
 
     def to_representation(self, instance):
         # NOTE(stephenfin): This is here to ensure our API looks the same even
@@ -183,7 +186,7 @@ class PatchList(ListAPIView):
 
     def get_queryset(self):
         return Patch.objects.all()\
-            .prefetch_related('check_set')\
+            .prefetch_related('check_set', 'tags')\
             .select_related('project', 'state', 'submitter', 'delegate',
                             'series')\
             .defer('content', 'diff', 'headers')
@@ -197,6 +200,6 @@ class PatchDetail(RetrieveUpdateAPIView):
 
     def get_queryset(self):
         return Patch.objects.all()\
-            .prefetch_related('check_set')\
+            .prefetch_related('check_set', 'tags')\
             .select_related('project', 'state', 'submitter', 'delegate',
                             'series')
