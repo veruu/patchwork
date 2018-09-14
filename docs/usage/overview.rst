@@ -119,10 +119,11 @@ one delegate can be assigned to a patch.
 Tags
 ~~~~
 
-Tags are specially formatted metadata appended to the foot the body of a patch
-or a comment on a patch. Patchwork extracts these tags at parse time and
-associates them with the patch. You add extra tags to an email by replying to
-the email. The following tags are available on a standard Patchwork install:
+Tags are specially formatted metadata appended to the foot the body of a patch,
+cover letter or a comment related to them. Patchwork extracts these tags at
+parse time and associates them with the submissions. You add extra tags to an
+email by replying to the email. The following tags are available on a standard
+Patchwork install:
 
 ``Acked-by:``
   For example::
