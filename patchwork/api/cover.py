@@ -26,6 +26,7 @@ class CoverLetterListSerializer(BaseHyperlinkedModelSerializer):
     mbox = SerializerMethodField()
     series = SeriesSerializer(read_only=True)
     comments = SerializerMethodField()
+    tags = SerializerMethodField()
 
     def get_web_url(self, instance):
         request = self.context.get('request')
@@ -39,6 +40,13 @@ class CoverLetterListSerializer(BaseHyperlinkedModelSerializer):
         return self.context.get('request').build_absolute_uri(
             reverse('api-cover-comment-list', kwargs={'pk': cover.id}))
 
+    def get_tags(self, instance):
+        tags = {}
+        for tag_object in instance.all_tags:
+            tags[tag_object.name] = instance.all_tags[tag_object]
+
+        return tags
+
     def to_representation(self, instance):
         # NOTE(stephenfin): This is here to ensure our API looks the same even
         # after we changed the series-patch relationship from M:N to 1:N. It
@@ -51,10 +59,11 @@ class CoverLetterListSerializer(BaseHyperlinkedModelSerializer):
     class Meta:
         model = CoverLetter
         fields = ('id', 'url', 'web_url', 'project', 'msgid', 'date', 'name',
-                  'submitter', 'mbox', 'series', 'comments')
+                  'submitter', 'mbox', 'series', 'comments', 'tags')
         read_only_fields = fields
         versioned_fields = {
             '1.1': ('web_url', 'mbox', 'comments'),
+            '1.2': ('tags', ),
         }
         extra_kwargs = {
             'url': {'view_name': 'api-cover-detail'},
@@ -99,6 +108,7 @@ class CoverLetterList(ListAPIView):
 
     def get_queryset(self):
         return CoverLetter.objects.all()\
+            .prefetch_related('series__tags')\
             .select_related('project', 'submitter', 'series')\
             .defer('content', 'headers')
 
@@ -110,4 +120,5 @@ class CoverLetterDetail(RetrieveAPIView):
 
     def get_queryset(self):
         return CoverLetter.objects.all()\
+            .prefetch_related('series__tags')\
             .select_related('project', 'submitter', 'series')

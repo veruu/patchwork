@@ -13,6 +13,7 @@ from patchwork.tests.utils import create_cover
 from patchwork.tests.utils import create_maintainer
 from patchwork.tests.utils import create_person
 from patchwork.tests.utils import create_project
+from patchwork.tests.utils import create_series
 from patchwork.tests.utils import create_user
 
 if settings.ENABLE_REST_API:
@@ -59,7 +60,9 @@ class TestCoverLetterAPI(APITestCase):
 
         person_obj = create_person(email='test@example.com')
         project_obj = create_project(linkname='myproject')
-        cover_obj = create_cover(project=project_obj, submitter=person_obj)
+        series = create_series()
+        cover_obj = create_cover(project=project_obj, submitter=person_obj,
+                                 series=series)
 
         # anonymous user
         resp = self.client.get(self.api_url())
@@ -92,7 +95,8 @@ class TestCoverLetterAPI(APITestCase):
         self.assertEqual(0, len(resp.data))
 
     def test_list_version_1_0(self):
-        create_cover()
+        series = create_series()
+        create_cover(series=series)
 
         resp = self.client.get(self.api_url(version='1.0'))
         self.assertEqual(status.HTTP_200_OK, resp.status_code)
@@ -103,8 +107,10 @@ class TestCoverLetterAPI(APITestCase):
 
     def test_detail(self):
         """Validate we can get a specific cover letter."""
+        series = create_series()
         cover_obj = create_cover(
-            headers='Received: from somewhere\nReceived: from another place'
+            headers='Received: from somewhere\nReceived: from another place',
+            series=series
         )
 
         resp = self.client.get(self.api_url(cover_obj.id))
@@ -119,7 +125,8 @@ class TestCoverLetterAPI(APITestCase):
             self.assertIn(value, resp.data['headers'][key])
 
     def test_detail_version_1_0(self):
-        cover = create_cover()
+        series = create_series()
+        cover = create_cover(series=series)
 
         resp = self.client.get(self.api_url(cover.id, version='1.0'))
         self.assertIn('url', resp.data)

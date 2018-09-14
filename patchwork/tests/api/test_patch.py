@@ -11,10 +11,13 @@ from django.conf import settings
 from django.urls import reverse
 
 from patchwork.models import Patch
+from patchwork.models import SeriesTag
+from patchwork.models import Tag
 from patchwork.tests.utils import create_maintainer
 from patchwork.tests.utils import create_patch
 from patchwork.tests.utils import create_person
 from patchwork.tests.utils import create_project
+from patchwork.tests.utils import create_series
 from patchwork.tests.utils import create_state
 from patchwork.tests.utils import create_user
 
@@ -67,8 +70,9 @@ class TestPatchAPI(APITestCase):
         person_obj = create_person(email='test@example.com')
         project_obj = create_project(linkname='myproject')
         state_obj = create_state(name='Under Review')
+        series = create_series()
         patch_obj = create_patch(state=state_obj, project=project_obj,
-                                 submitter=person_obj)
+                                 submitter=person_obj, series=series)
 
         # anonymous user
         resp = self.client.get(self.api_url())
@@ -125,7 +129,8 @@ class TestPatchAPI(APITestCase):
         self.assertEqual(2, len(resp.data))
 
     def test_list_version_1_0(self):
-        create_patch()
+        series = create_series()
+        create_patch(series=series)
 
         resp = self.client.get(self.api_url(version='1.0'))
         self.assertEqual(status.HTTP_200_OK, resp.status_code)
@@ -135,10 +140,16 @@ class TestPatchAPI(APITestCase):
 
     def test_detail(self):
         """Validate we can get a specific patch."""
+        series = create_series()
         patch = create_patch(
             content='Reviewed-by: Test User <test@example.com>\n',
-            headers='Received: from somewhere\nReceived: from another place'
+            headers='Received: from somewhere\nReceived: from another place',
+            series=series
         )
+        # Tags are extracted via parser now so we need to create them here
+        tag = Tag.objects.get(name='Reviewed-by')
+        SeriesTag.objects.create(tag=tag, value='Test User <test@example.com>',
+                                 series=series, patch=patch)
 
         resp = self.client.get(self.api_url(patch.id))
         self.assertEqual(status.HTTP_200_OK, resp.status_code)
@@ -152,10 +163,12 @@ class TestPatchAPI(APITestCase):
 
         self.assertEqual(patch.content, resp.data['content'])
         self.assertEqual(patch.diff, resp.data['diff'])
-        self.assertEqual(0, len(resp.data['tags']))
+        self.assertEqual(1, len(resp.data['tags']['Reviewed-by']))
+        self.assertEqual(0, len(resp.data['tags']['Acked-by']))
 
     def test_detail_version_1_0(self):
-        patch = create_patch()
+        series = create_series()
+        patch = create_patch(series=series)
 
         resp = self.client.get(self.api_url(item=patch.id, version='1.0'))
         self.assertIn('url', resp.data)

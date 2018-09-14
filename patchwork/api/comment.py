@@ -20,6 +20,7 @@ class CommentListSerializer(BaseHyperlinkedModelSerializer):
     subject = SerializerMethodField()
     headers = SerializerMethodField()
     submitter = PersonSerializer(read_only=True)
+    tags = SerializerMethodField()
 
     def get_web_url(self, instance):
         request = self.context.get('request')
@@ -28,6 +29,13 @@ class CommentListSerializer(BaseHyperlinkedModelSerializer):
     def get_subject(self, comment):
         return email.parser.Parser().parsestr(comment.headers,
                                               True).get('Subject', '')
+
+    def get_tags(self, instance):
+        tags = {}
+        for tag_object in instance.all_tags:
+            tags[tag_object.name] = instance.all_tags[tag_object]
+
+        return tags
 
     def get_headers(self, comment):
         headers = {}
@@ -46,10 +54,11 @@ class CommentListSerializer(BaseHyperlinkedModelSerializer):
     class Meta:
         model = Comment
         fields = ('id', 'web_url', 'msgid', 'date', 'subject', 'submitter',
-                  'content', 'headers')
+                  'content', 'headers', 'tags')
         read_only_fields = fields
         versioned_fields = {
             '1.1': ('web_url', ),
+            '1.2': ('tags', ),
         }
 
 

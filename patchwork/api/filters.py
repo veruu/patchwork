@@ -7,6 +7,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django_filters.rest_framework import FilterSet
+from django_filters import Filter
 from django_filters import IsoDateTimeFilter
 from django_filters import ModelMultipleChoiceFilter
 from django.forms import ModelMultipleChoiceField as BaseMultipleChoiceField
@@ -21,6 +22,7 @@ from patchwork.models import Patch
 from patchwork.models import Person
 from patchwork.models import Project
 from patchwork.models import Series
+from patchwork.models import SeriesTag
 from patchwork.models import State
 
 
@@ -123,6 +125,70 @@ class StateFilter(ModelMultipleChoiceFilter):
     field_class = StateChoiceField
 
 
+class CoverTagFilter(Filter):
+
+    def filter(self, qs, query):
+        series_list = []
+
+        for tag_filter in query:
+            try:
+                tag_name, tag_value = tag_filter.split(':', 1)
+            except ValueError:
+                raise ValidationError(
+                    'Query in format `tag=<name>:<value>` expected! <name> or '
+                    '<value> can be missing or wildcard (*) if all tags with '
+                    'given attribute are expected.'
+                )
+            # Map the globbing or missing wildcard to regex syntax
+            if tag_name.strip() in ['', '*']:
+                tag_name = '.*'
+            if tag_value.strip() in ['', '*']:
+                tag_value = '.*'
+
+            series_list.extend(SeriesTag.objects.filter(
+                tag__name__regex=tag_name,
+                value__regex=tag_value,
+                patch__isnull=True
+            ).values_list('series', flat=True))
+
+        return qs.filter(series__in=series_list)
+
+
+class PatchTagFilter(Filter):
+
+    def filter(self, qs, query):
+        series_list = []
+        patch_list = []
+
+        for tag_filter in query:
+            try:
+                tag_name, tag_value = tag_filter.split(':', 1)
+            except ValueError:
+                raise ValidationError(
+                    'Query in format `tag=<name>:<value>` expected! <name> or '
+                    '<value> can be missing or wildcard (*) if all tags with '
+                    'given attribute are expected.'
+                )
+            # Map the globbing or missing wildcard to regex syntax
+            if tag_name.strip() in ['', '*']:
+                tag_name = '.*'
+            if tag_value.strip() in ['', '*']:
+                tag_value = '.*'
+
+            series_list.extend(SeriesTag.objects.filter(
+                tag__name__regex=tag_name,
+                value__regex=tag_value,
+                patch__isnull=True
+            ).values_list('series', flat=True))
+            patch_list.extend(SeriesTag.objects.filter(
+                tag__name__regex=tag_name,
+                value__regex=tag_value,
+                patch__isnull=False
+            ).values_list('patch', flat=True))
+
+        return qs.filter(Q(id__in=patch_list) | Q(series__in=series_list))
+
+
 class UserChoiceField(ModelMultipleChoiceField):
 
     alternate_lookup = 'username__iexact'
@@ -160,10 +226,11 @@ class CoverLetterFilterSet(TimestampMixin, FilterSet):
     series = BaseFilter(queryset=Project.objects.all(),
                         widget=MultipleHiddenInput)
     submitter = PersonFilter(queryset=Person.objects.all())
+    tag = CoverTagFilter(widget=MultipleHiddenInput)
 
     class Meta:
         model = CoverLetter
-        fields = ('project', 'series', 'submitter')
+        fields = ('project', 'series', 'submitter', 'tag')
 
 
 class PatchFilterSet(TimestampMixin, FilterSet):
@@ -176,11 +243,12 @@ class PatchFilterSet(TimestampMixin, FilterSet):
     submitter = PersonFilter(queryset=Person.objects.all())
     delegate = UserFilter(queryset=User.objects.all())
     state = StateFilter(queryset=State.objects.all())
+    tag = PatchTagFilter(widget=MultipleHiddenInput)
 
     class Meta:
         model = Patch
         fields = ('project', 'series', 'submitter', 'delegate',
-                  'state', 'archived')
+                  'state', 'archived', 'tag')
 
 
 class CheckFilterSet(TimestampMixin, FilterSet):

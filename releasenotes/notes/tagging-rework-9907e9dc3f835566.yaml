@@ -6,6 +6,17 @@ features:
     accidentally sent the Acked-by email twice, since only a single same pair  
     tagname-value can be assigned to a patch. Tags from cover letters are now  
     counted towards each patch in the series.
+api:
+  - |
+    The ``tags`` field of the ``/patches`` is now populated and an equivalent
+    field is added for the cover letters and comments. Tags are listed as
+    key-value pairs, making it easier to find where a specific tag originated
+    from.
+  - |
+    Tag filtering on patches and cover letters using ``?tag=<name>:<value>`` is
+    now supported. <name> or <value> can also be missing or wildcard ``*`` in
+    case all tags with given attribute are wanted. For example,
+    ``?tag=Acked-by:*`` returns all patches / cover letters which were acked.
 upgrade:                                                                       
   - |                                                                          
     The ``retag`` command (``python manage.py retag``) needs to be ran after   
