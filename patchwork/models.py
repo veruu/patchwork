@@ -350,7 +350,11 @@ class FilenameMixin(object):
 class Submission(FilenameMixin, EmailMixin, models.Model):
     # parent
 
-    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE,
+                                help_text='If modifying this field on Patch, '
+                                'don\'t forget to modify the "Patch project" '
+                                'field appropriately as well to ensure proper '
+                                'functionality!')
 
     # submission metadata
 
@@ -405,7 +409,11 @@ class Patch(Submission):
 
     # duplicate project from submission in subclass so we can count the
     # patches in a project without needing to do a JOIN.
-    patch_project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    patch_project = models.ForeignKey(Project, on_delete=models.CASCADE,
+                                      help_text='"Project" field needs to be '
+                                      'kept in sync and changed manually in '
+                                      'case of modifications to ensure proper '
+                                      'functionality!')
 
     objects = PatchManager()
 
