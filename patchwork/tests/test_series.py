@@ -531,7 +531,8 @@ class SeriesTotalTest(_BaseTestCase):
     def test_complete(self):
         """Series received with expected number of patches.
 
-        Parse a series where all patches are received as expected.
+        Parse a series where all patches and a cover letter are received as
+        expected.
 
         Input:
 
@@ -547,6 +548,24 @@ class SeriesTotalTest(_BaseTestCase):
 
         series = patches[0].series
         self.assertTrue(series.received_all)
+
+    def test_cover_delayed(self):
+        """
+        Check that series are mark as not complete if a cover is expected but
+        didn't arrive yet.
+
+        Input:
+
+            - [PATCH 1/2] test: Add some lorem ipsum
+            - [PATCH 2/2] test: Convert to Markdown
+        """
+        covers, patches, _ = self._parse_mbox(
+            'base-cover-letter-delayed.mbox', [0, 2, 0])
+
+        self.assertSerialized(patches, [2])
+
+        series = patches[0].series
+        self.assertFalse(series.received_all)
 
     def test_extra_patches(self):
         """Series received with additional patches.

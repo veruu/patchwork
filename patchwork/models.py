@@ -7,6 +7,7 @@
 from collections import Counter
 from collections import OrderedDict
 import datetime
+import email.parser
 import random
 import re
 
@@ -380,6 +381,10 @@ class Submission(FilenameMixin, EmailMixin, models.Model):
 
 class CoverLetter(Submission):
 
+    def delete(self, *args, **kwargs):
+        self.series.cover_expected = True
+        super(CoverLetter, self).delete(**kwargs)
+
     def get_absolute_url(self):
         return reverse('cover-detail', kwargs={'cover_id': self.id})
 
@@ -627,6 +632,7 @@ class Series(FilenameMixin, models.Model):
     cover_letter = models.OneToOneField(CoverLetter, related_name='series',
                                         null=True,
                                         on_delete=models.CASCADE)
+    cover_expected = models.BooleanField(default=False)
 
     # metadata
     name = models.CharField(max_length=255, blank=True, null=True,
@@ -658,7 +664,7 @@ class Series(FilenameMixin, models.Model):
 
     @property
     def received_all(self):
-        return self.total <= self.received_total
+        return (self.total <= self.received_total) and not self.cover_expected
 
     def add_cover_letter(self, cover):
         """Add a cover letter to the series.
@@ -699,13 +705,24 @@ class Series(FilenameMixin, models.Model):
             if self.name == name:
                 self.name = self._format_name(cover)
 
+        self.cover_expected = False
+
         self.save()
 
     def add_patch(self, patch, number):
         """Add a patch to the series."""
         # both user defined names and cover letter-based names take precedence
-        if not self.name and number == 1:
-            self.name = patch.name  # keep the prefixes for patch-based names
+        if number == 1:
+            if not self.name:  # keep the prefixes for patch-based names
+                self.name = patch.name
+
+            # Find out if we expect a cover letter to arrive later
+            if not self.cover_letter:
+                in_reply_to = email.parser.Parser().parsestr(
+                    patch.headers, True).get('In-Reply-To')
+                if in_reply_to:
+                    self.cover_expected = True
+
             self.save()
 
         patch.series = self

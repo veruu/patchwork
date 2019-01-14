@@ -211,7 +211,7 @@ def create_series_created_event(sender, instance, created, raw, **kwargs):
 
 
 @receiver(pre_save, sender=Patch)
-def create_series_completed_event(sender, instance, raw, **kwargs):
+def create_series_completed_by_patch_event(sender, instance, raw, **kwargs):
 
     # NOTE(stephenfin): It's actually possible for this event to be fired
     # multiple times for a given series. To trigger this case, you would need
@@ -240,5 +240,26 @@ def create_series_completed_event(sender, instance, raw, **kwargs):
 
     # we can't use "series.received_all" here since we haven't actually saved
     # the instance yet so we duplicate that logic here but with an offset
+    if (instance.series.received_total + 1) >= instance.series.total and \
+            not instance.series.cover_expected:
+        create_event(instance.series)
+
+
+@receiver(pre_save, sender=CoverLetter)
+def create_series_completed_by_cover_event(sender, instance, raw, **kwargs):
+
+    def create_event(series):
+        return Event.objects.create(
+            category=Event.CATEGORY_SERIES_COMPLETED,
+            project=series.project,
+            series=series)
+
+    # Don't trigger for items loaded from fixtures or new items
+    if raw or not instance.pk:
+        return
+
+    # We can't use "series.received_all" here since we haven't actually saved
+    # the instance yet so we duplicate that logic here. No need to check
+    # series.cover_expected since the cover has just arrived.
     if (instance.series.received_total + 1) >= instance.series.total:
         create_event(instance.series)
